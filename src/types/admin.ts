@@ -8,6 +8,7 @@ export interface RubricScore {
 }
 
 export interface ProblemResult {
+  id: string; // The problem UUID
   problemName: string;
   rubric: RubricScore;
   locked: boolean;
@@ -35,6 +36,8 @@ export const RUBRIC_LABELS: Record<keyof RubricScore, string> = {
   testCases: "Test Cases",
   timeComplexity: "Time Complexity",
   spaceComplexity: "Space Complexity",
+  actualTime: "Time (s)",
+  actualMemory: "Memory (MB)"
 };
 
 export const RUBRIC_ICONS: Record<keyof RubricScore, string> = {
@@ -42,6 +45,8 @@ export const RUBRIC_ICONS: Record<keyof RubricScore, string> = {
   testCases: "🧪",
   timeComplexity: "⏱",
   spaceComplexity: "📦",
+  actualTime: "⏱",
+  actualMemory: "💾"
 };
 
 export const MAX_PER_RUBRIC = 2;
@@ -57,7 +62,7 @@ export function totalScore(team: TeamData): number {
 }
 
 export function rubricTotal(team: TeamData, key: keyof RubricScore): number {
-  return team.problems.reduce((sum, p) => sum + p.rubric[key], 0);
+  return team.problems.reduce((sum, p) => sum + (p.rubric[key] || 0), 0);
 }
 
 export function problemTotal(r: RubricScore): number {

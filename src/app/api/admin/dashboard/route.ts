@@ -56,12 +56,12 @@ export async function GET() {
           event: `VIOLATION: ${v.type}${v.details ? ` (${v.details})` : ""}`,
           type: "violation" as const
         })),
-        ...problems.map(p => ({
+        ...problems.map((p: any) => ({
           time: new Date(p.submittedAt).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' }),
           event: `Solved ${p.problemName} (Score: ${p.rubric.output + p.rubric.testCases + p.rubric.timeComplexity + p.rubric.spaceComplexity}/8)`,
           type: "info" as const
         }))
-      ].sort((a,b) => b.time.localeCompare(a.time)).slice(0, 10);
+      ].sort((a: any, b: any) => b.time.localeCompare(a.time)).slice(0, 10);
 
       return {
         id: t.id,

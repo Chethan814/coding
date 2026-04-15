@@ -28,16 +28,17 @@ export default function AdminMonitor() {
   const [loading, setLoading] = useState(true);
 
   async function fetchLiveStatus() {
-    const { data: participants, error } = await supabase
-      .from("event_participants")
-      .select(`
-        *,
-        users(name),
-        teams(name)
-      `);
-      
-    if (participants) setData(participants);
-    setLoading(false);
+    try {
+      const res = await fetch("/api/admin/monitor");
+      const participants = await res.json();
+      if (Array.isArray(participants)) {
+        setData(participants);
+      }
+    } catch (err) {
+      console.error("Failed to fetch monitor data");
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {

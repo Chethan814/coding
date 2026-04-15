@@ -14,7 +14,13 @@ export default function Leaderboard() {
   useEffect(() => {
     const userStr = localStorage.getItem("user");
     const user = userStr ? JSON.parse(userStr) : null;
-    setIsAdmin(user?.role === "admin");
+    const adminCheck = user?.role === "admin";
+    setIsAdmin(adminCheck);
+
+    if (user && !adminCheck) {
+      router.push("/contest");
+      return;
+    }
 
     const fetchLeaderboard = async () => {
       // Fetch from the leaderboard table joined with team names

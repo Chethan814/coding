@@ -265,6 +265,11 @@ export default function CreateProblem() {
 
                 <div className="space-y-2">
                   <Label htmlFor="order">List Order (Index)</Label>
+                  <Input 
+                    id="order" 
+                    type="number"
+                    value={formData.order_index}
+                    onChange={(e) => setFormData({...formData, order_index: parseInt(e.target.value) || 0})}
                   />
                 </div>
               </CardContent>

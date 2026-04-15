@@ -11,6 +11,8 @@ export default function Lobby() {
   const [isReady, setIsReady] = useState(false);
   const [teamsJoined, setTeamsJoined] = useState(0);
   const [contestStatus, setContestStatus] = useState<"waiting" | "starting" | "active">("waiting");
+  const [liveAt, setLiveAt] = useState<string | null>(null);
+  const [secondsSinceLive, setSecondsSinceLive] = useState<number>(0);
   const [userData, setUserData] = useState<{name: string, teamName: string}|null>(null);
 
   useEffect(() => {
@@ -19,12 +21,13 @@ export default function Lobby() {
       setUserData(JSON.parse(stored));
     }
     async function fetchStatus() {
-      const { data } = await supabase.from("events").select("status").limit(1).single();
+      const { data } = await supabase.from("events").select("status, live_at").limit(1).single();
       const { count } = await supabase.from("teams").select("*", { count: "exact", head: true });
       
       if (count) setTeamsJoined(count);
       
       if (data) {
+        setLiveAt(data.live_at);
         if (data.status === "not_started") setContestStatus("waiting");
         else if (data.status === "instructions") setContestStatus("starting");
         else setContestStatus("active");
@@ -35,6 +38,27 @@ export default function Lobby() {
     const interval = setInterval(fetchStatus, 5000); // Polling for status change
     return () => clearInterval(interval);
   }, []);
+
+  // Grace Period Enforcement (2 Minute Join Rule)
+  useEffect(() => {
+    if (!liveAt || contestStatus === "waiting") return;
+
+    const timer = setInterval(() => {
+      const start = new Date(liveAt).getTime();
+      const now = new Date().getTime();
+      const elapsed = Math.floor((now - start) / 1000);
+      setSecondsSinceLive(elapsed);
+
+      // Disqualification check: 2 minutes (120 seconds)
+      if (elapsed > 120) {
+        clearInterval(timer);
+        localStorage.removeItem("user");
+        router.push("/login?disqualified=late_entry");
+      }
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [liveAt, contestStatus, router]);
 
   const handleProceed = () => {
     if (isReady && contestStatus !== "waiting") {

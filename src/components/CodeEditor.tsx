@@ -30,7 +30,7 @@ function defineEditorTheme(monaco: Monaco) {
   });
 }
 
-const CodeEditor = ({ onRun, onSubmit, problemId, defaultStdin, canSubmit }: { onRun: any, onSubmit: any, problemId: string, defaultStdin?: string, canSubmit?: boolean }) => {
+const CodeEditor = ({ onRun, onSubmit, problemId, defaultStdin, canSubmit, starterCode }: { onRun: any, onSubmit: any, problemId: string, defaultStdin?: string, canSubmit?: boolean, starterCode?: string }) => {
   const [language, setLanguage] = useState("python");
   const [code, setCode] = useState("");
   const [isRunning, setIsRunning] = useState(false);
@@ -107,9 +107,14 @@ const CodeEditor = ({ onRun, onSubmit, problemId, defaultStdin, canSubmit }: { o
     const sig = getSignatureLine(language, metadata);
     setGeneratedSignature(sig);
 
-    const body = language === "python" ? "    # Write your logic here\n    pass" : "    // Write your logic here\n    return 0;\n}";
-    setCode(`${sig}\n${body}`);
-  }, [language, metadata, getSignatureLine]);
+    // If starterCode (error template) is provided, use it. Otherwise, use blank body.
+    if (starterCode) {
+        setCode(starterCode);
+    } else {
+        const body = language === "python" ? "    # Write your logic here\n    pass" : "    // Write your logic here\n    return 0;\n}";
+        setCode(`${sig}\n${body}`);
+    }
+  }, [language, metadata, getSignatureLine, starterCode]);
 
   const validateSignature = () => {
     const lines = code.split("\n");

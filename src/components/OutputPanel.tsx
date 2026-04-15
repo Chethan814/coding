@@ -104,37 +104,35 @@ const OutputPanel = ({
                 </pre>
              </div>
 
-             {status === "success" && (
-                <div className="flex items-center gap-3 pt-2">
-                   {prevProblemId && (
-                      <Button 
-                        size="sm" 
-                        variant="secondary"
-                        onClick={() => router.push(`/contest/${prevProblemId}`)}
-                        className="font-mono text-xs gap-2"
-                      >
-                         Previous
-                      </Button>
-                   )}
-                   {nextProblemId && (
-                      <Button 
-                        size="sm" 
-                        onClick={() => router.push(`/contest/${nextProblemId}`)}
-                        className="bg-success text-success-foreground hover:bg-success/90 font-mono text-xs gap-2"
-                      >
-                         Next Challenge <ArrowRight className="h-3.5 w-3.5" />
-                      </Button>
-                   )}
+             <div className="flex items-center gap-3 pt-4 border-t border-border/50">
+                {prevProblemId && (
                    <Button 
-                      size="sm" 
-                      variant="outline" 
-                      onClick={() => router.push("/contest")}
-                      className="border-primary/20 text-primary hover:bg-primary/5 font-mono text-xs gap-2"
+                     size="sm" 
+                     variant="secondary"
+                     onClick={() => router.push(`/contest/${prevProblemId}`)}
+                     className="bg-white/5 border-white/10 text-white hover:bg-white/10 font-mono text-xs gap-2"
                    >
-                      <LayoutGrid className="h-3.5 w-3.5" /> Back to Arena
+                      Previous
                    </Button>
-                </div>
-             )}
+                )}
+                <Button 
+                   size="sm" 
+                   variant="outline" 
+                   onClick={() => router.push("/contest")}
+                   className="border-primary/20 text-primary hover:bg-primary/5 font-mono text-xs gap-2 mr-auto"
+                >
+                   <LayoutGrid className="h-3.5 w-3.5" /> Dashboard
+                </Button>
+                {nextProblemId && (
+                   <Button 
+                     size="sm" 
+                     onClick={() => router.push(`/contest/${nextProblemId}`)}
+                     className="bg-primary text-background hover:bg-primary/90 font-mono text-xs gap-2 font-bold"
+                   >
+                      Next Challenge <ArrowRight className="h-3.5 w-3.5" />
+                   </Button>
+                )}
+             </div>
           </div>
         )}
       </div>

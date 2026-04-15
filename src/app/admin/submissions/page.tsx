@@ -28,18 +28,17 @@ export default function AdminSubmissions() {
 
   useEffect(() => {
     async function fetchSubmissions() {
-      const { data, error } = await supabase
-        .from("submissions")
-        .select(`
-          *,
-          problems(title),
-          users(name),
-          rubric_scores(*)
-        `)
-        .order("created_at", { ascending: false });
-        
-      if (data) setSubmissions(data);
-      setLoading(false);
+      try {
+        const res = await fetch("/api/admin/submissions");
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          setSubmissions(data);
+        }
+      } catch (err) {
+        console.error("Failed to fetch submissions");
+      } finally {
+        setLoading(false);
+      }
     }
     fetchSubmissions();
   }, []);

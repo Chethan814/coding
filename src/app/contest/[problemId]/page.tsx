@@ -18,6 +18,8 @@ interface Problem {
   constraints: string;
   examples: any[];
   firstTestCase?: string;
+  type?: "coding" | "debugging";
+  starter_code?: string;
 }
 
 export default function ProblemPage() {
@@ -40,6 +42,7 @@ export default function ProblemPage() {
   const [canSubmit, setCanSubmit] = useState(false);
   const [teamWarnings, setTeamWarnings] = useState(0);
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [liveAt, setLiveAt] = useState<string | null>(null);
 
   // Monitor Hooks & Violations
   useEffect(() => {
@@ -53,14 +56,6 @@ export default function ProblemPage() {
       if (data) setTeamWarnings(data.warnings || 0);
     };
     fetchWarnings();
-
-    let idleTimer: any;
-    const resetIdle = () => {
-      clearTimeout(idleTimer);
-      idleTimer = setTimeout(() => {
-        reportViolation("inactivity", "User inactive for 5 minutes");
-      }, 5 * 60 * 1000);
-    };
 
     const reportViolation = async (type: string, details: string) => {
       try {
@@ -98,75 +93,39 @@ export default function ProblemPage() {
     window.addEventListener("blur", handleBlur);
     document.addEventListener("copy", handleCopy);
 
-    window.addEventListener("mousemove", resetIdle);
-    window.addEventListener("keydown", resetIdle);
-    resetIdle();
-
     return () => {
       document.removeEventListener("visibilitychange", handleVisibility);
       window.removeEventListener("blur", handleBlur);
       document.removeEventListener("copy", handleCopy);
-      window.removeEventListener("mousemove", resetIdle);
-      window.removeEventListener("keydown", resetIdle);
-      clearTimeout(idleTimer);
     };
   }, [router]);
 
-  // Timer logic
+  // Unified Multi-Round Timer Sync
   useEffect(() => {
-    let timer: any;
-    async function startTimer() {
-      const userStr = localStorage.getItem("user");
-      const user = userStr ? JSON.parse(userStr) : null;
-      if (!user?.teamId) return;
-
-      const DURATION = 90 * 60 * 1000;
-      
-      // 1. Immediate: LocalStorage
-      let startTimeStr = localStorage.getItem(`contest_start_${user.teamId}`);
-      
-      // 2. Fallback: Database
-      if (!startTimeStr) {
-        const { data: team } = await supabase.from("teams").select("start_time").eq("id", user.teamId).single();
-        if (team?.start_time) {
-          startTimeStr = team.start_time;
-          localStorage.setItem(`contest_start_${user.teamId}`, startTimeStr || "");
-        }
-      }
-
-      if (startTimeStr) {
-        const startTime = new Date(startTimeStr).getTime();
-        
-        timer = setInterval(() => {
-          const now = new Date().getTime();
-          const remaining = startTime + DURATION - now;
-          
-          if (remaining <= 0) {
-            setTimeLeft("00:00:00");
-            clearInterval(timer);
-            toast.error("Contest has ended!");
-            localStorage.removeItem("user");
-            localStorage.removeItem(`contest_start_${user.teamId}`);
-            router.push("/login");
-          } else {
-            const h = Math.floor(remaining / (1000 * 60 * 60));
-            const m = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
-            const s = Math.floor((remaining % (1000 * 60)) / 1000);
-            
-            const elapsed = now - startTime;
-            let isDebugging = elapsed >= 60 * 60 * 1000;
-            setTimeLeft(
-              `${isDebugging ? "DEBUGGING " : "CODING "}${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
-            );
-          }
-        }, 1000);
-      } else {
-        setTimeLeft("NOT STARTED");
-      }
+    async function fetchLiveAt() {
+      const { data } = await supabase.from("events").select("live_at").limit(1).single();
+      if (data?.live_at) setLiveAt(data.live_at);
     }
-    startTimer();
+    fetchLiveAt();
+  }, []);
+
+  useEffect(() => {
+    if (!liveAt) return;
+    const { calculateContestState } = require("@/lib/contest-timing");
+    
+    const timer = setInterval(() => {
+      const state = calculateContestState(liveAt);
+      setTimeLeft(`${state.phase.toUpperCase()} ${state.displayText}`);
+
+      if (state.phase === "ended") {
+        clearInterval(timer);
+        localStorage.removeItem("user");
+        router.push("/login"); // Auto-logout
+      }
+    }, 1000);
+
     return () => clearInterval(timer);
-  }, [router]);
+  }, [liveAt, router]);
 
   useEffect(() => {
     async function fetchProblem() {
@@ -367,6 +326,7 @@ export default function ProblemPage() {
               defaultStdin={problem?.firstTestCase}
               problemId={problemId}
               canSubmit={canSubmit}
+              starterCode={problem?.starter_code}
             />
           </div>
           <div className="h-[250px] bg-card border border-border rounded-xl">
