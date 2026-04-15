@@ -2,7 +2,7 @@ import { TeamData } from "@/types/admin";
 
 export const teamsData: TeamData[] = [
   {
-    id: 1,
+    id: "1",
     name: "ByteForce",
     suspicion: "low",
     status: "active",
@@ -24,7 +24,7 @@ export const teamsData: TeamData[] = [
     ],
   },
   {
-    id: 2,
+    id: "2",
     name: "NullPointers",
     suspicion: "medium",
     status: "active",
@@ -46,7 +46,7 @@ export const teamsData: TeamData[] = [
     ],
   },
   {
-    id: 3,
+    id: "3",
     name: "SegFaulters",
     suspicion: "high",
     status: "active",
@@ -67,7 +67,7 @@ export const teamsData: TeamData[] = [
     ],
   },
   {
-    id: 4,
+    id: "4",
     name: "StackOverflow",
     suspicion: "low",
     status: "frozen",
@@ -90,7 +90,7 @@ export const teamsData: TeamData[] = [
     ],
   },
   {
-    id: 5,
+    id: "5",
     name: "RecursionError",
     suspicion: "low",
     status: "active",
@@ -108,7 +108,7 @@ export const teamsData: TeamData[] = [
     ],
   },
   {
-    id: 6,
+    id: "6",
     name: "404TeamName",
     suspicion: "high",
     status: "disqualified",
