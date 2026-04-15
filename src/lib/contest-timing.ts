@@ -6,7 +6,7 @@ export interface TimingState {
   displayText: string;
 }
 
-export function calculateContestState(liveAt: string | null): TimingState {
+export function calculateContestState(liveAt: string | null, phaseOverride?: string | null): TimingState {
   if (!liveAt) return { phase: "not_started", timeLeftSeconds: 0, displayText: "00:00:00" };
 
   const start = new Date(liveAt).getTime();
@@ -27,6 +27,13 @@ export function calculateContestState(liveAt: string | null): TimingState {
   if (elapsedSeconds < 0) {
     phase = "not_started";
     remaining = Math.abs(elapsedSeconds);
+  } else if (phaseOverride === "debugging" && elapsedSeconds < CONTEST_END) {
+    // ⚡ ROLE-OVER LOGIC: Use the remaining time until the absolute end of the contest
+    phase = "debugging";
+    remaining = CONTEST_END - elapsedSeconds;
+  } else if (phaseOverride === "break" && elapsedSeconds < ROUND2_START) {
+    phase = "break";
+    remaining = ROUND2_START - elapsedSeconds;
   } else if (elapsedSeconds < BREAK_START) {
     phase = "coding";
     remaining = ROUND1_SEC - elapsedSeconds;

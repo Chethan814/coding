@@ -25,6 +25,9 @@ export default function ContestDashboard() {
   const [solvedProblemIds, setSolvedProblemIds] = useState<Set<string>>(new Set());
   const [contestState, setContestState] = useState({ phase: "not_started" as any, timeLeftSeconds: 0, displayText: "00:00:00" });
   const [liveAt, setLiveAt] = useState<string | null>(null);
+  const [phaseOverride, setPhaseOverride] = useState<string | null>(null);
+  const [teamId, setTeamId] = useState<string | null>(null);
+  const [showWarpModal, setShowWarpModal] = useState(false);
 
   useEffect(() => {
     async function fetchEventDetails() {
@@ -43,8 +46,14 @@ export default function ContestDashboard() {
         const userStr = localStorage.getItem("user");
         const user = userStr ? JSON.parse(userStr) : null;
         if (user?.teamId) {
+          setTeamId(user.teamId);
+          // Fetch solved problems
           const { data: scores } = await supabase.from("best_scores").select("problem_id").eq("team_id", user.teamId);
           if (scores) setSolvedProblemIds(new Set(scores.map(s => s.problem_id)));
+
+          // Fetch phase override
+          const { data: teamData } = await supabase.from("teams").select("current_phase").eq("id", user.teamId).single();
+          if (teamData?.current_phase) setPhaseOverride(teamData.current_phase);
         }
       }
       setLoading(false);
@@ -59,18 +68,17 @@ export default function ContestDashboard() {
     const { calculateContestState } = require("@/lib/contest-timing");
     
     const timer = setInterval(() => {
-      const state = calculateContestState(liveAt);
+      const state = calculateContestState(liveAt, phaseOverride);
       setContestState(state);
 
       if (state.phase === "ended") {
         clearInterval(timer);
-        localStorage.removeItem("user");
-        router.push("/login"); // Auto-logout
+        router.push("/summary"); // Redirect to results instead of login
       }
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [liveAt, router]);
+  }, [liveAt, phaseOverride, router]);
 
   const activeProblems = problems.filter(p => {
     if (contestState.phase === "coding") return p.type === "coding";
@@ -178,7 +186,33 @@ export default function ContestDashboard() {
             <p className="font-mono text-sm">No problems available for this phase.</p>
           </div>
         )}
+
+        {/* ⚡ PHASE WARP TRIGGER */}
+        {!phaseOverride && contestState.phase === "coding" && 
+         problems.filter(p => p.type === 'coding').every(p => solvedProblemIds.has(p.id)) && 
+         problems.filter(p => p.type === 'coding').length > 0 && (
+          <div className="flex flex-col items-center gap-4 py-12 animate-in fade-in slide-in-from-bottom-4 duration-700">
+             <div className="p-1 px-4 bg-success/20 border border-success/30 rounded-full text-success text-[10px] font-black uppercase tracking-widest">
+               Round 1 Mastery Reached
+             </div>
+             <h3 className="text-3xl font-black text-white italic tracking-tighter uppercase">Ready for Round 2?</h3>
+             <p className="text-muted-foreground text-center max-w-sm text-sm">You have finished coding early. You can carry your remaining time into debugging!</p>
+             <div className="flex gap-4 mt-2">
+                <Button variant="secondary" onClick={() => handlePhaseJump("break")}>Take 5 Min Break</Button>
+                <Button className="bg-success text-white hover:bg-success/90" onClick={() => handlePhaseJump("debugging")}>Warp to Debugging (+{Math.floor(contestState.timeLeftSeconds/60)} Min Bonus)</Button>
+             </div>
+          </div>
+        )}
       </div>
     </div>
   );
+
+  async function handlePhaseJump(newPhase: string) {
+    if (!teamId) return;
+    const { error } = await supabase.from("teams").update({ current_phase: newPhase }).eq("id", teamId);
+    if (!error) {
+      setPhaseOverride(newPhase);
+      setShowWarpModal(false);
+    }
+  }
 }
