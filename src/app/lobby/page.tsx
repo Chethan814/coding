@@ -11,8 +11,13 @@ export default function Lobby() {
   const [isReady, setIsReady] = useState(false);
   const [teamsJoined, setTeamsJoined] = useState(0);
   const [contestStatus, setContestStatus] = useState<"waiting" | "starting" | "active">("waiting");
+  const [userData, setUserData] = useState<{name: string, teamName: string}|null>(null);
 
   useEffect(() => {
+    const stored = localStorage.getItem("user");
+    if (stored) {
+      setUserData(JSON.parse(stored));
+    }
     async function fetchStatus() {
       const { data } = await supabase.from("events").select("status").limit(1).single();
       const { count } = await supabase.from("teams").select("*", { count: "exact", head: true });
@@ -59,7 +64,7 @@ export default function Lobby() {
                 Team Name
               </p>
               <p className="text-lg font-semibold text-foreground font-mono">
-                ByteForce
+                {userData?.teamName || "Loading..."}
               </p>
             </div>
             <div className="bg-secondary/50 border border-border rounded-md p-4">
@@ -67,7 +72,7 @@ export default function Lobby() {
                 Participant
               </p>
               <p className="text-lg font-semibold text-foreground font-mono">
-                John Doe
+                {userData?.name || "Loading..."}
               </p>
             </div>
           </div>

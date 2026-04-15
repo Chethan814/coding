@@ -25,8 +25,29 @@ export default function Instructions() {
     return () => clearInterval(interval);
   }, []);
 
-  const handleStart = () => {
+  const handleStart = async () => {
     if (agreed && isLive) {
+      const userStr = localStorage.getItem("user");
+      const user = userStr ? JSON.parse(userStr) : null;
+      
+      let startTime = new Date().toISOString();
+
+      if (user?.teamId) {
+        try {
+          const res = await fetch("/api/contest/start", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ teamId: user.teamId })
+          });
+          const data = await res.json();
+          if (data.startedAt) startTime = data.startedAt;
+        } catch (err) {
+          console.error("Failed to record start time in DB, using local fallback");
+        }
+      }
+
+      // Always persist locally as a secondary source of truth
+      localStorage.setItem(`contest_start_${user?.teamId}`, startTime);
       router.push("/contest");
     }
   };
@@ -101,9 +122,12 @@ export default function Instructions() {
                       <Zap className="h-4 w-4 text-primary" />
                       <span className="text-sm font-semibold text-foreground">Output</span>
                     </div>
-                    <div className="flex items-baseline gap-1">
-                      <span className="text-2xl font-bold text-primary font-mono">2</span>
-                      <span className="text-sm text-muted-foreground">points</span>
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-baseline gap-1">
+                        <span className="text-2xl font-bold text-primary font-mono">2</span>
+                        <span className="text-sm text-muted-foreground">points</span>
+                      </div>
+                      <span className="text-xs text-muted-foreground">Correct for default test</span>
                     </div>
                   </div>
                   <div className="bg-secondary/50 border border-border rounded-md p-4">
@@ -111,9 +135,12 @@ export default function Instructions() {
                       <TestTube className="h-4 w-4 text-primary" />
                       <span className="text-sm font-semibold text-foreground">Test Cases</span>
                     </div>
-                    <div className="flex items-baseline gap-1">
-                      <span className="text-2xl font-bold text-primary font-mono">2</span>
-                      <span className="text-sm text-muted-foreground">points</span>
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-baseline gap-1">
+                        <span className="text-2xl font-bold text-primary font-mono">2</span>
+                        <span className="text-sm text-muted-foreground">points</span>
+                      </div>
+                      <span className="text-xs text-muted-foreground">All hidden test cases pass</span>
                     </div>
                   </div>
                   <div className="bg-secondary/50 border border-border rounded-md p-4">
@@ -121,9 +148,12 @@ export default function Instructions() {
                       <Clock className="h-4 w-4 text-primary" />
                       <span className="text-sm font-semibold text-foreground">Time Complexity</span>
                     </div>
-                    <div className="flex items-baseline gap-1">
-                      <span className="text-2xl font-bold text-primary font-mono">2</span>
-                      <span className="text-sm text-muted-foreground">points</span>
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-baseline gap-1">
+                        <span className="text-2xl font-bold text-primary font-mono">2</span>
+                        <span className="text-sm text-muted-foreground">points</span>
+                      </div>
+                      <span className="text-xs text-muted-foreground">&lt; 1s (2 pts) | &lt; 2s (1 pt)</span>
                     </div>
                   </div>
                   <div className="bg-secondary/50 border border-border rounded-md p-4">
@@ -131,9 +161,12 @@ export default function Instructions() {
                       <Package className="h-4 w-4 text-primary" />
                       <span className="text-sm font-semibold text-foreground">Space Complexity</span>
                     </div>
-                    <div className="flex items-baseline gap-1">
-                      <span className="text-2xl font-bold text-primary font-mono">2</span>
-                      <span className="text-sm text-muted-foreground">points</span>
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-baseline gap-1">
+                        <span className="text-2xl font-bold text-primary font-mono">2</span>
+                        <span className="text-sm text-muted-foreground">points</span>
+                      </div>
+                      <span className="text-xs text-muted-foreground">&lt; 64MB (2 pts) | &lt; 128MB (1 pt)</span>
                     </div>
                   </div>
                 </div>

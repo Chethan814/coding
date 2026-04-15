@@ -22,33 +22,85 @@ export default function ContestDashboard() {
   const router = useRouter();
   const [problems, setProblems] = useState<Problem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [timeLeft, setTimeLeft] = useState(3600); // 1 Hour default
+  const [solvedProblemIds, setSolvedProblemIds] = useState<Set<string>>(new Set());
+  const [timeLeft, setTimeLeft] = useState<string>("00:00:00");
+  const [secondsRemaining, setSecondsRemaining] = useState<number>(3600);
 
   useEffect(() => {
     async function fetchProblems() {
       const { data, error } = await supabase.from("problems").select("*").order("order_index", { ascending: true });
       if (data && !error) {
         setProblems(data as Problem[]);
+        
+        // Fetch solved status
+        const userStr = localStorage.getItem("user");
+        const user = userStr ? JSON.parse(userStr) : null;
+        if (user?.teamId) {
+          const { data: scores } = await supabase
+            .from("best_scores")
+            .select("problem_id")
+            .eq("team_id", user.teamId);
+          
+          if (scores) {
+            setSolvedProblemIds(new Set(scores.map(s => s.problem_id)));
+          }
+        }
       }
       setLoading(false);
     }
     
     fetchProblems();
 
-    // Start 60-minute timer
-    const timerId = setInterval(() => {
-      setTimeLeft((prev) => (prev > 0 ? prev - 1 : 0));
-    }, 1000);
+    // Fetch global timer and sync (LocalStorage + DB fallback)
+    let timer: any;
+    async function syncTimer() {
+      const userStr = localStorage.getItem("user");
+      const user = userStr ? JSON.parse(userStr) : null;
+      if (!user?.teamId) return;
 
-    return () => clearInterval(timerId);
+      const DURATION = 90 * 60 * 1000; // 90 mins
+      
+      // 1. Immediate Source: LocalStorage
+      let startTimeStr = localStorage.getItem(`contest_start_${user.teamId}`);
+      
+      // 2. Secondary Source: Database
+      if (!startTimeStr) {
+        const { data: team } = await supabase.from("teams").select("start_time").eq("id", user.teamId).single();
+        if (team?.start_time) {
+          startTimeStr = team.start_time;
+          localStorage.setItem(`contest_start_${user.teamId}`, startTimeStr || "");
+        }
+      }
+
+      if (startTimeStr) {
+        const startTime = new Date(startTimeStr).getTime();
+
+        timer = setInterval(() => {
+          const now = new Date().getTime();
+          const remaining = startTime + DURATION - now;
+
+          if (remaining <= 0) {
+            setTimeLeft("00:00:00");
+            clearInterval(timer);
+            localStorage.removeItem("user");
+            localStorage.removeItem(`contest_start_${user.teamId}`);
+            router.push("/login");
+          } else {
+            const h = Math.floor(remaining / (1000 * 60 * 60));
+            const m = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
+            const s = Math.floor((remaining % (1000 * 60)) / 1000);
+            setSecondsRemaining(Math.floor(remaining / 1000));
+            setTimeLeft(`${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`);
+          }
+        }, 1000);
+      } else {
+        setTimeLeft("NOT STARTED");
+      }
+    }
+
+    syncTimer();
+    return () => clearInterval(timer);
   }, []);
-
-  const formatTime = (seconds: number) => {
-    const h = Math.floor(seconds / 3600);
-    const m = Math.floor((seconds % 3600) / 60);
-    const s = seconds % 60;
-    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-  };
 
   const diffColors: Record<string, string> = {
     Easy: "bg-success/20 text-success border-success/50",
@@ -78,8 +130,8 @@ export default function ContestDashboard() {
             <Timer className="h-5 w-5 text-primary" />
             <div className="flex flex-col">
               <span className="text-[10px] text-primary/70 uppercase font-black font-mono leading-none tracking-widest">Time Remaining</span>
-              <span className={cn("text-2xl font-black font-mono tracking-tighter tabular-nums", timeLeft < 300 ? "text-destructive" : "text-white")}>
-                {formatTime(timeLeft)}
+              <span className={cn("text-2xl font-black font-mono tracking-tighter tabular-nums", secondsRemaining < 300 ? "text-destructive" : "text-white")}>
+                {timeLeft}
               </span>
             </div>
           </div>
@@ -91,9 +143,16 @@ export default function ContestDashboard() {
               <CardHeader className="pb-4">
                 <div className="flex justify-between items-start mb-2">
                   <CardTitle className="text-lg">{prob.title}</CardTitle>
-                  <Badge variant="outline" className={diffColors[prob.difficulty] || "text-foreground"}>
-                    {prob.difficulty}
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    {solvedProblemIds.has(prob.id) && (
+                      <Badge className="bg-success text-white border-0">
+                        Submitted
+                      </Badge>
+                    )}
+                    <Badge variant="outline" className={diffColors[prob.difficulty] || "text-foreground"}>
+                      {prob.difficulty}
+                    </Badge>
+                  </div>
                 </div>
                 <CardDescription className="line-clamp-2 text-xs">
                   {prob.description}

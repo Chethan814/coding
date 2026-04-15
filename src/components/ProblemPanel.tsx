@@ -1,4 +1,5 @@
 import { Badge } from "@/components/ui/badge";
+import { CheckCircle2 } from "lucide-react";
 
 interface Example {
   input: string;
@@ -13,6 +14,7 @@ interface ProblemPanelProps {
   description?: string;
   constraints?: string | string[];
   examples?: Example[];
+  isSubmitted?: boolean;
 }
 
 const ProblemPanel = ({
@@ -32,6 +34,7 @@ const ProblemPanel = ({
       output: "[1,2]",
     },
   ],
+  isSubmitted = false,
 }: ProblemPanelProps) => {
   const difficultyColor = {
     Easy: "text-success border-success",
@@ -48,7 +51,15 @@ const ProblemPanel = ({
   return (
     <div className="h-full flex flex-col overflow-hidden">
       <div className="panel-header flex items-center justify-between">
-        <span>Problem</span>
+        <div className="flex items-center gap-2">
+          <span>Problem</span>
+          {isSubmitted && (
+            <Badge className="bg-success/20 text-success border-success/30 hover:bg-success/20 animate-in zoom-in duration-300">
+               <CheckCircle2 className="h-3 w-3 mr-1" />
+               SUBMITTED
+            </Badge>
+          )}
+        </div>
         <div className="flex items-center gap-2">
           <Badge variant="outline" className={difficultyColor[difficulty]}>
             {difficulty}

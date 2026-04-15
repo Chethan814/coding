@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Trophy, ArrowLeft, Clock, ShieldAlert } from "lucide-react";
+import { Trophy, ArrowLeft, Clock, ShieldAlert, Loader2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
 export default function Leaderboard() {
@@ -14,49 +14,43 @@ export default function Leaderboard() {
   useEffect(() => {
     const userStr = localStorage.getItem("user");
     const user = userStr ? JSON.parse(userStr) : null;
-    const adminCheck = user?.role === "admin";
-    setIsAdmin(adminCheck);
+    setIsAdmin(user?.role === "admin");
 
-    if (adminCheck) {
-      // If admin, fetch real data
-      const fetchLeaderboard = async () => {
-         const { data, error } = await supabase
-           .from("teams")
-           .select("*")
-           .order("total_score", { ascending: false });
-           
-         if (data) {
-           setTeams(data.map((t, i) => ({
-             rank: i + 1,
-             name: t.name,
-             problems: t.problems_solved || 0,
-             score: t.total_score || 0,
-             lastSubmit: t.updated_at ? new Date(t.updated_at).toLocaleTimeString() : "N/A"
-           })));
-         }
+    const fetchLeaderboard = async () => {
+      // Fetch from the leaderboard table joined with team names
+      const { data, error } = await supabase
+        .from("leaderboard")
+        .select(`
+          total_score,
+          last_submission_time,
+          teams (name)
+        `)
+        .order("total_score", { ascending: false });
+        
+      if (data) {
+        setTeams(data.map((entry: any, i) => ({
+          rank: i + 1,
+          name: entry.teams?.name || "Unknown",
+          problems: 0, // In this schema, solved count might need another join or column
+          score: entry.total_score || 0,
+          lastSubmit: entry.last_submission_time ? new Date(entry.last_submission_time).toLocaleTimeString() : "N/A"
+        })));
       }
-      fetchLeaderboard();
-    }
+    };
+
+    fetchLeaderboard();
+    const interval = setInterval(fetchLeaderboard, 10000); // 10s refresh
+    return () => clearInterval(interval);
   }, []);
 
   if (isAdmin === null) return null;
 
-  if (!isAdmin) {
+  // We no longer block access unless they aren't logged in at all
+  if (isAdmin === null && !teams.length) {
     return (
-      <div className="min-h-screen bg-[#0a0f1d] flex flex-col items-center justify-center p-6 text-center">
-        <ShieldAlert className="h-16 w-16 text-destructive mb-4" />
-        <h1 className="text-2xl font-black text-white font-mono uppercase tracking-tighter italic">Access Restricted</h1>
-        <p className="text-muted-foreground mt-2 max-w-xs font-mono text-[10px] leading-relaxed">
-          THE LIVE LEADERBOARD IS CURRENTLY LOCKED FOR PARTICIPANTS. 
-          PLEASE FOCUS ON YOUR CHALLENGES.
-        </p>
-        <Button 
-          variant="outline" 
-          className="mt-8 border-primary/20 text-primary hover:bg-primary/10 font-mono text-xs uppercase"
-          onClick={() => router.push("/contest")}
-        >
-          Return to Arena
-        </Button>
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6 text-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <p className="font-mono text-xs text-muted-foreground mt-4">Syncing Arena Standings...</p>
       </div>
     );
   }

@@ -30,7 +30,7 @@ function defineEditorTheme(monaco: Monaco) {
   });
 }
 
-const CodeEditor = ({ onRun, onSubmit, problemId, defaultStdin }: { onRun: any, onSubmit: any, problemId: string, defaultStdin?: string }) => {
+const CodeEditor = ({ onRun, onSubmit, problemId, defaultStdin, canSubmit }: { onRun: any, onSubmit: any, problemId: string, defaultStdin?: string, canSubmit?: boolean }) => {
   const [language, setLanguage] = useState("python");
   const [code, setCode] = useState("");
   const [isRunning, setIsRunning] = useState(false);
@@ -198,7 +198,7 @@ const CodeEditor = ({ onRun, onSubmit, problemId, defaultStdin }: { onRun: any, 
           <Button size="sm" onClick={handleRun} disabled={isRunning} className="bg-[#1e2d45] text-white hover:bg-[#2a3f5f] h-9 px-4 uppercase text-[10px] font-bold shadow-lg">
             Run Test
           </Button>
-          <Button size="sm" onClick={handleSubmit} className="bg-primary text-background font-bold h-9 px-8 uppercase text-[10px] tracking-wider shadow-[0_0_20px_rgba(var(--primary-rgb),0.3)] hover:scale-105 transition-transform">
+          <Button size="sm" onClick={handleSubmit} disabled={!canSubmit} className="bg-primary text-background font-bold h-9 px-8 uppercase text-[10px] tracking-wider shadow-[0_0_20px_rgba(var(--primary-rgb),0.3)] hover:scale-105 transition-transform disabled:opacity-50 disabled:scale-100 disabled:cursor-not-allowed">
             Submit
           </Button>
         </div>

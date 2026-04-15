@@ -36,33 +36,132 @@ export default function ProblemPage() {
   const [execTime, setExecTime] = useState<string>("");
   const [execMemory, setExecMemory] = useState<number>(0);
   const [nextProblemId, setNextProblemId] = useState<string | null>(null);
+  const [prevProblemId, setPrevProblemId] = useState<string | null>(null);
+  const [canSubmit, setCanSubmit] = useState(false);
+  const [teamWarnings, setTeamWarnings] = useState(0);
+  const [isSubmitted, setIsSubmitted] = useState(false);
+
+  // Monitor Hooks & Violations
+  useEffect(() => {
+    const userStr = localStorage.getItem("user");
+    const user = userStr ? JSON.parse(userStr) : null;
+    if (!user) return;
+
+    // Initial fetch of warnings
+    const fetchWarnings = async () => {
+      const { data } = await supabase.from("teams").select("warnings").eq("id", user.teamId).single();
+      if (data) setTeamWarnings(data.warnings || 0);
+    };
+    fetchWarnings();
+
+    let idleTimer: any;
+    const resetIdle = () => {
+      clearTimeout(idleTimer);
+      idleTimer = setTimeout(() => {
+        reportViolation("inactivity", "User inactive for 5 minutes");
+      }, 5 * 60 * 1000);
+    };
+
+    const reportViolation = async (type: string, details: string) => {
+      try {
+        const res = await fetch("/api/violations", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ team_id: user.teamId, user_id: user.id, type, details })
+        });
+        const data = await res.json();
+        if (data.disqualified) {
+            toast.error("You have been disqualified for multiple violations.");
+            router.push("/summary");
+        } else if (data.warnings) {
+            setTeamWarnings(data.warnings);
+            toast.warning(`Violation logged! Warning ${data.warnings}/3`, { duration: 5000 });
+        }
+      } catch (err) {
+        console.error("Failed to report violation");
+      }
+    };
+
+    const handleVisibility = () => {
+      if (document.hidden) reportViolation("tab_switch", "User switched tabs or minimized window");
+    };
+
+    const handleBlur = () => {
+      reportViolation("tab_switch", "Window lost focus");
+    };
+
+    const handleCopy = () => {
+      reportViolation("copy_paste", "User attempted to copy/paste text");
+    };
+
+    document.addEventListener("visibilitychange", handleVisibility);
+    window.addEventListener("blur", handleBlur);
+    document.addEventListener("copy", handleCopy);
+
+    window.addEventListener("mousemove", resetIdle);
+    window.addEventListener("keydown", resetIdle);
+    resetIdle();
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("blur", handleBlur);
+      document.removeEventListener("copy", handleCopy);
+      window.removeEventListener("mousemove", resetIdle);
+      window.removeEventListener("keydown", resetIdle);
+      clearTimeout(idleTimer);
+    };
+  }, [router]);
 
   // Timer logic
   useEffect(() => {
     let timer: any;
     async function startTimer() {
-      const { data } = await supabase.from("events").select("end_time").limit(1).single();
-      if (data?.end_time) {
-        const endTime = new Date(data.end_time).getTime();
+      const userStr = localStorage.getItem("user");
+      const user = userStr ? JSON.parse(userStr) : null;
+      if (!user?.teamId) return;
+
+      const DURATION = 90 * 60 * 1000;
+      
+      // 1. Immediate: LocalStorage
+      let startTimeStr = localStorage.getItem(`contest_start_${user.teamId}`);
+      
+      // 2. Fallback: Database
+      if (!startTimeStr) {
+        const { data: team } = await supabase.from("teams").select("start_time").eq("id", user.teamId).single();
+        if (team?.start_time) {
+          startTimeStr = team.start_time;
+          localStorage.setItem(`contest_start_${user.teamId}`, startTimeStr || "");
+        }
+      }
+
+      if (startTimeStr) {
+        const startTime = new Date(startTimeStr).getTime();
         
         timer = setInterval(() => {
           const now = new Date().getTime();
-          const diff = endTime - now;
+          const remaining = startTime + DURATION - now;
           
-          if (diff <= 0) {
+          if (remaining <= 0) {
             setTimeLeft("00:00:00");
             clearInterval(timer);
             toast.error("Contest has ended!");
-            router.push("/summary");
+            localStorage.removeItem("user");
+            localStorage.removeItem(`contest_start_${user.teamId}`);
+            router.push("/login");
           } else {
-            const h = Math.floor(diff / (1000 * 60 * 60));
-            const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-            const s = Math.floor((diff % (1000 * 60)) / 1000);
+            const h = Math.floor(remaining / (1000 * 60 * 60));
+            const m = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
+            const s = Math.floor((remaining % (1000 * 60)) / 1000);
+            
+            const elapsed = now - startTime;
+            let isDebugging = elapsed >= 60 * 60 * 1000;
             setTimeLeft(
-              `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
+              `${isDebugging ? "DEBUGGING " : "CODING "}${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
             );
           }
         }, 1000);
+      } else {
+        setTimeLeft("NOT STARTED");
       }
     }
     startTimer();
@@ -79,6 +178,18 @@ export default function ProblemPage() {
         
       if (prob) {
         setProblem(prob);
+        
+        // Check if already solved/submitted
+        const userStr = localStorage.getItem("user");
+        const user = userStr ? JSON.parse(userStr) : null;
+        if (user?.teamId) {
+          const { data: existing } = await supabase
+            .from("best_scores")
+            .select("submission_id")
+            .match({ team_id: user.teamId, problem_id: problemId })
+            .maybeSingle();
+          if (existing) setIsSubmitted(true);
+        }
         // Also fetch first test case for default Run input
         const { data: tcs } = await supabase
           .from("test_cases")
@@ -102,6 +213,11 @@ export default function ProblemPage() {
             setNextProblemId(allProbs[currentIndex + 1].id);
           } else {
             setNextProblemId(null);
+          }
+          if (currentIndex > 0) {
+            setPrevProblemId(allProbs[currentIndex - 1].id);
+          } else {
+            setPrevProblemId(null);
           }
         }
       }
@@ -147,8 +263,10 @@ export default function ProblemPage() {
       if (result.stderr || (result.status && result.status.id !== 3)) {
         setErrorVal(result.stderr || result.compile_output || result.status?.description || "Runtime Error");
         setOutputStatus("error");
+        setCanSubmit(false);
       } else {
         setOutputStatus("success");
+        setCanSubmit(true);
       }
     } catch (e: any) {
       setErrorVal("Connection lost or server error. Please try again.");
@@ -197,8 +315,9 @@ export default function ProblemPage() {
         }
       } else {
         setOutputStatus("success");
+        setIsSubmitted(true);
         setFailureDetails(null);
-        setOutputVal(`ACCEPTED! Score: ${result.rubric.total_score}/8\n\n${result.message}`);
+        setOutputVal(`ACCEPTED! Score: ${result.rubric?.total_score || 0}/8\n\n${result.message}`);
         toast.success("Submission Successful!");
       }
     } catch (e: any) {
@@ -216,7 +335,7 @@ export default function ProblemPage() {
 
   return (
     <div className="h-screen flex flex-col overflow-hidden bg-background">
-      <TopBar timeLeft={timeLeft} />
+      <TopBar timeLeft={timeLeft} warnings={teamWarnings} />
 
       <div className="flex-1 flex overflow-hidden p-2 gap-2">
         {/* Left: Problem */}
@@ -228,6 +347,7 @@ export default function ProblemPage() {
             points={problem?.points}
             constraints={problem?.constraints}
             examples={problem?.examples}
+            isSubmitted={isSubmitted}
           />
         </div>
 
@@ -239,6 +359,7 @@ export default function ProblemPage() {
               onSubmit={handleSubmit} 
               defaultStdin={problem?.firstTestCase}
               problemId={problemId}
+              canSubmit={canSubmit}
             />
           </div>
           <div className="h-[250px] bg-card border border-border rounded-xl">
@@ -250,6 +371,7 @@ export default function ProblemPage() {
               time={execTime}
               memory={execMemory}
               nextProblemId={nextProblemId}
+              prevProblemId={prevProblemId}
             />
           </div>
         </div>

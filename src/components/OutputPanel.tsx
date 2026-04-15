@@ -16,6 +16,7 @@ interface OutputPanelProps {
   time?: string;
   memory?: number;
   nextProblemId?: string | null;
+  prevProblemId?: string | null;
 }
 
 const OutputPanel = ({
@@ -25,7 +26,8 @@ const OutputPanel = ({
   failureDetails = null,
   time,
   memory,
-  nextProblemId = null
+  nextProblemId = null,
+  prevProblemId = null
 }: OutputPanelProps) => {
   const router = useRouter();
   const statusConfig = {
@@ -104,6 +106,16 @@ const OutputPanel = ({
 
              {status === "success" && (
                 <div className="flex items-center gap-3 pt-2">
+                   {prevProblemId && (
+                      <Button 
+                        size="sm" 
+                        variant="secondary"
+                        onClick={() => router.push(`/contest/${prevProblemId}`)}
+                        className="font-mono text-xs gap-2"
+                      >
+                         Previous
+                      </Button>
+                   )}
                    {nextProblemId && (
                       <Button 
                         size="sm" 

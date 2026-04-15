@@ -28,81 +28,25 @@ export default function Admin() {
   const [viewMode, setViewMode] = useState<ViewMode>("monitor");
   const [compareIds, setCompareIds] = useState<string[]>([]);
 
-  const fetchDashboardData = async () => {
-    setLoading(true);
+  const fetchDashboardData = async (isBackground = false) => {
+    if (!isBackground) setLoading(true);
     try {
-      // 1. Fetch all teams
-      const { data: dbTeams, error: teamsError } = await supabase
-        .from("teams")
-        .select(`
-          id,
-          name,
-          submissions (
-            id,
-            problem_id,
-            created_at,
-            problems (title),
-            rubric_scores (
-              output_score,
-              test_case_score,
-              time_complexity_score,
-              space_complexity_score
-            )
-          )
-        `);
-
-      if (teamsError) throw teamsError;
-
-      // 2. Map DB teams to UI TeamData shape
-      const mappedTeams: TeamData[] = (dbTeams || []).map((t: any) => {
-        // For each team, we find the BEST rubric score for each problem they solved
-        const problemResultsMap: Record<string, any> = {};
-
-        t.submissions?.forEach((sub: any) => {
-          const rubric = sub.rubric_scores?.[0];
-          if (!rubric) return;
-
-          const currentTotal = rubric.output_score + rubric.test_case_score + 
-                               rubric.time_complexity_score + rubric.space_complexity_score;
-          
-          const existing = problemResultsMap[sub.problem_id];
-          if (!existing || currentTotal > (existing.total || 0)) {
-            problemResultsMap[sub.problem_id] = {
-              problemName: sub.problems?.title || "Unknown Problem",
-              total: currentTotal,
-              submittedAt: sub.created_at,
-              rubric: {
-                output: rubric.output_score || 0,
-                testCases: rubric.test_case_score || 0,
-                timeComplexity: rubric.time_complexity_score || 0,
-                spaceComplexity: rubric.space_complexity_score || 0,
-              },
-              locked: false // Manual override mock
-            };
-          }
-        });
-
-        return {
-          id: t.id,
-          name: t.name,
-          problems: Object.values(problemResultsMap),
-          status: "active",
-          suspicion: "low",
-          warnings: 0,
-          timeline: []
-        };
-      });
-
-      setTeams(mappedTeams);
+      const res = await fetch("/api/admin/dashboard");
+      const data = await res.json();
+      
+      if (data.error) throw new Error(data.error);
+      setTeams(data);
     } catch (err: any) {
-      toast.error("Dashboard Load Failed: " + err.message);
+      toast.error("Dashboard Sync Failed: " + err.message);
     } finally {
-      setLoading(false);
+      if (!isBackground) setLoading(false);
     }
   };
 
   useEffect(() => {
     fetchDashboardData();
+    const interval = setInterval(() => fetchDashboardData(true), 5000);
+    return () => clearInterval(interval);
   }, []);
 
   const handleUpdateRubric = (teamId: string, problemIdx: number, key: keyof RubricScore, value: number) => {
@@ -165,9 +109,20 @@ export default function Admin() {
     }));
   };
 
-  const handleAdminAction = (teamId: string, action: string) => {
-    toast(`Successfully ${action} team`);
-  }
+  const handleAdminAction = async (teamId: string, action: string) => {
+    try {
+      const res = await fetch("/api/admin/team-action", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ team_id: teamId, action })
+      });
+      if (!res.ok) throw new Error("Action failed");
+      toast.success(`Successfully ${action} team`);
+      fetchDashboardData(true);
+    } catch (err: any) {
+      toast.error(err.message);
+    }
+  };
 
   const toggleCompare = (id: string) => {
     setCompareIds((prev) =>
@@ -218,7 +173,7 @@ export default function Admin() {
           <Button 
             variant="ghost" 
             size="sm" 
-            onClick={fetchDashboardData}
+            onClick={() => fetchDashboardData(false)}
             disabled={loading}
             className="font-mono text-xs text-muted-foreground hover:text-primary"
           >

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
+import { supabaseAdmin } from "@/lib/supabaseServer";
 import { generateWrapper, ProblemMetadata } from "@/lib/code-wrappers";
 
 const LANGUAGE_MAP: Record<string, number> = {
@@ -196,78 +197,138 @@ export async function POST(request: Request) {
       }
     }
 
-    // 5. Scoring & Persistence
-    const avgTime = totalTime / testCases.length;
+    // 5. Calculate Metrics
+    const avgTime = totalTime / (testCases.length || 1);
     const memoryMB = maxMemory / 1024;
-    const allPassed = passedCount === testCases.length && results.length === testCases.length;
-    const passPercentage = passedCount / testCases.length;
+    const allPassed = testCases.length > 0 && passedCount === testCases.length && results.length === testCases.length;
+    const firstTestPassed = results.length > 0 && results[0].isMatch;
 
-    const outputScore = allPassed ? 2 : 0;
-    const tcScore = passPercentage === 1 ? 2 : passPercentage >= 0.5 ? 1 : 0;
-    const timeScore = allPassed ? (avgTime <= 1.0 ? 2 : avgTime <= 2.0 ? 1 : 0) : 0;
-    const spaceScore = allPassed ? (memoryMB <= 64 ? 2 : memoryMB <= 128 ? 1 : 0) : 0;
+    const outputScore = firstTestPassed ? 2 : 0;
+    const tcScore = allPassed ? 2 : 0;
+    let timeScore = 0;
+    let spaceScore = 0;
 
-    const totalScore = outputScore + tcScore + timeScore + spaceScore;
+    if (outputScore === 2 && tcScore === 2) {
+      timeScore = avgTime < 1.0 ? 2 : avgTime < 2.0 ? 1 : 0;
+      spaceScore = memoryMB < 64 ? 2 : memoryMB < 128 ? 1 : 0;
+    }
+
+    const currentTotal = outputScore + tcScore + timeScore + spaceScore;
     const status = allPassed ? "accepted" : passedCount > 0 ? "partial" : "wrong";
 
-    const { data: subData } = await supabase
-      .from("submissions")
-      .insert({
-        user_id: safeUserId,
-        team_id: safeTeamId,
-        problem_id: problemId,
-        code,
-        language,
-        output: results[results.length - 1]?.result?.stdout || "",
-        status,
-        execution_time: avgTime,
-        execution_memory: memoryMB,
-      })
-      .select("id")
-      .single();
+    // 6. MULTI-TABLE PERSISTENCE (Using Admin client to bypass RLS)
+    
+    // 6a. Insert Submission (With Resilient Fallback for missing columns)
+    let subData: any = null;
+    let subError: any = null;
 
-    if (subData) {
-      await supabase.from("rubric_scores").insert({
-        submission_id: subData.id,
-        output_score: outputScore,
-        test_case_score: tcScore,
-        time_complexity_score: timeScore,
-        space_complexity_score: spaceScore,
-        total_score: totalScore,
-        execution_time: avgTime,
-        execution_memory: memoryMB,
-      });
+    try {
+      const result = await supabaseAdmin
+        .from("submissions")
+        .insert({
+          user_id: safeUserId,
+          team_id: safeTeamId,
+          problem_id: problemId,
+          code,
+          language,
+          output: results[results.length - 1]?.result?.stdout || "",
+          status,
+          execution_time: avgTime,
+          execution_memory: memoryMB,
+        })
+        .select("id")
+        .single();
+      
+      subData = result.data;
+      subError = result.error;
 
-      if (safeTeamId) {
-        const { data: teamSubs } = await supabase
+      // If column is missing (code 42703), retry without metrics
+      if (subError?.code === "42703") {
+        console.warn("⚠️ Database columns 'execution_time' or 'execution_memory' missing. Retrying without metrics.");
+        const retryResult = await supabaseAdmin
           .from("submissions")
-          .select("problem_id, rubric_scores (total_score)")
-          .eq("team_id", safeTeamId);
+          .insert({
+            user_id: safeUserId,
+            team_id: safeTeamId,
+            problem_id: problemId,
+            code,
+            language,
+            output: results[results.length - 1]?.result?.stdout || "",
+            status,
+          })
+          .select("id")
+          .single();
+        subData = retryResult.data;
+        subError = retryResult.error;
+      }
+    } catch (e) {
+      console.error("Submission insertion failed", e);
+    }
 
-        if (teamSubs) {
-          const bestScores: Record<string, number> = {};
-          teamSubs.forEach((s: any) => {
-            const score = s.rubric_scores?.[0]?.total_score || 0;
-            bestScores[s.problem_id] = Math.max(bestScores[s.problem_id] || 0, score);
-          });
-          const newTotal = Object.values(bestScores).reduce((a, b) => a + b, 0);
-          await supabase.from("teams").update({
-            total_score: newTotal,
-            problems_solved: Object.keys(bestScores).length,
-            updated_at: new Date().toISOString()
-          }).eq("id", safeTeamId);
-        }
+    if (subError || !subData) throw subError || new Error("Failed to insert submission");
+
+    // 6b. Insert Rubric Score (using exact schema column names)
+    await supabaseAdmin.from("rubric_scores").insert({
+      submission_id: subData.id,
+      output_score: outputScore,
+      test_case_score: tcScore,
+      time_complexity_score: timeScore,
+      space_complexity_score: spaceScore,
+      total_score: currentTotal
+    });
+
+    if (safeTeamId) {
+      // 6c. Update Best Scores
+      const { data: currentBest } = await supabaseAdmin
+        .from("best_scores")
+        .select("best_score")
+        .match({ team_id: safeTeamId, problem_id: problemId })
+        .single();
+
+      if (!currentBest || currentTotal > (currentBest.best_score || 0)) {
+        await supabaseAdmin.from("best_scores").upsert({
+          team_id: safeTeamId,
+          problem_id: problemId,
+          best_score: currentTotal,
+          submission_id: subData.id,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'team_id,problem_id' });
+      }
+
+      // 6d. Recalculate Leaderboard
+      // 1. Get event_id for this problem
+      const { data: probData } = await supabaseAdmin.from("problems").select("event_id").eq("id", problemId).single();
+      const eventId = probData?.event_id;
+
+      if (eventId) {
+        // 2. Sum best scores for this team/event
+        const { data: allBest } = await supabaseAdmin.from("best_scores").select("best_score").eq("team_id", safeTeamId);
+        const teamTotal = (allBest || []).reduce((sum, b) => sum + (b.best_score || 0), 0);
+
+        // 3. Update leaderboard table
+        await supabaseAdmin.from("leaderboard").upsert({
+          team_id: safeTeamId,
+          event_id: eventId,
+          total_score: teamTotal,
+          last_submission_time: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'team_id,event_id' });
       }
     }
 
     return NextResponse.json({
       success: true,
       status,
-      rubric: { outputScore, tcScore, timeScore, spaceScore, totalScore },
-      failureDetails: firstFailure,
+      rubric: { 
+        outputScore, 
+        tcScore, 
+        timeScore, 
+        spaceScore, 
+        totalScore: currentTotal 
+      },
       message: firstFailure?.status === "Compilation Error" || firstFailure?.status === "Wrong Signature"
         ? firstFailure.error
-        : `${passedCount}/${testCases.length} cases passed. Score: ${totalScore}/8`,
+        : `${passedCount}/${testCases.length} cases passed. Score: ${currentTotal}/8`,
     });
 
   } catch (error: any) {

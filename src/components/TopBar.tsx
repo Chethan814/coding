@@ -59,12 +59,23 @@ const TopBar = ({
           </span>
         </div>
 
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground mr-2">
           <AlertTriangle className="h-3.5 w-3.5" />
           <span className="font-mono">
             {warnings}/{maxWarnings}
           </span>
         </div>
+
+        <div className="h-6 w-px bg-border mx-2" />
+
+        <Button
+           variant="ghost"
+           size="sm"
+           onClick={() => router.push("/leaderboard")}
+           className="text-xs font-mono text-muted-foreground hover:text-primary"
+        >
+           Rankings
+        </Button>
 
         <Button
           variant="ghost"
