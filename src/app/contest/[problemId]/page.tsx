@@ -9,11 +9,22 @@ import OutputPanel from "@/components/OutputPanel";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 
+interface Problem {
+  id: string;
+  title: string;
+  description: string;
+  difficulty: "Easy" | "Medium" | "Hard";
+  points: number;
+  constraints: string;
+  examples: any[];
+  firstTestCase?: string;
+}
+
 export default function ProblemPage() {
   const { problemId } = useParams() as { problemId: string };
   const router = useRouter();
   
-  const [problem, setProblem] = useState<any>(null);
+  const [problem, setProblem] = useState<Problem | null>(null);
   const [loading, setLoading] = useState(true);
   const [timeLeft, setTimeLeft] = useState("00:00:00");
   
@@ -76,7 +87,7 @@ export default function ProblemPage() {
           .limit(1);
         
         if (tcs && tcs.length > 0) {
-           setProblem(prev => ({ ...prev, firstTestCase: tcs[0].input }));
+           setProblem(prev => prev ? { ...prev, firstTestCase: tcs[0].input } : null);
         }
 
         // Fetch NEXT problem ID based on order_index
