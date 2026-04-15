@@ -5,42 +5,39 @@ export async function GET() {
   try {
     // 1. Fetch teams with their best scores and related details
     // Joining: teams -> best_scores -> submissions -> rubric_scores
-    const { data: teams, error } = await supabaseAdmin
-      .from("teams")
-      .select(`
-        id,
-        name,
-        best_scores (
-          best_score,
-          updated_at,
-          problems (id, title),
-          submissions (
-            id,
-            language,
-            execution_time,
-            execution_memory,
-            rubric_scores (
-              output_score,
-              test_case_score,
-              time_complexity_score,
-              space_complexity_score
+    // 1. Fetch data with Admin client
+    const [{ data: teams }, { data: violations }] = await Promise.all([
+      supabaseAdmin
+        .from("teams")
+        .select(`
+          id, name, status, suspicion, warnings,
+          best_scores (
+            best_score,
+            updated_at,
+            problems (id, title),
+            submissions (
+              id, language, execution_time, execution_memory,
+              rubric_scores (output_score, test_case_score, time_complexity_score, space_complexity_score)
             )
           )
-        )
-      `);
+        `),
+      supabaseAdmin.from("violations").select("*").order("created_at", { ascending: false })
+    ]);
 
-    if (error) throw error;
+    if (!teams) throw new Error("No teams found");
 
-    // 2. Map to frontend TeamData format
-    const formattedData = (teams || []).map((t: any) => {
+    // 2. Map to frontend format
+    const formattedData = teams.map((t: any) => {
+      const teamViolations = (violations || []).filter(v => v.team_id === t.id);
+      
       const problems = (t.best_scores || []).map((bs: any) => {
           const sub = bs.submissions;
           const rubric = sub?.rubric_scores?.[0] || {};
-          
           return {
+            id: bs.problems?.id,
             problemName: bs.problems?.title || "Unknown",
             submittedAt: bs.updated_at,
-            locked: true, // Assuming consolidated scores are locked by default
+            locked: false,
             rubric: {
               output: rubric.output_score || 0,
               testCases: rubric.test_case_score || 0,
@@ -52,15 +49,28 @@ export async function GET() {
           };
       });
 
+      // Construct timeline from violations and major scoring events
+      const timeline = [
+        ...teamViolations.map(v => ({
+          time: new Date(v.created_at).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' }),
+          event: `VIOLATION: ${v.type}${v.details ? ` (${v.details})` : ""}`,
+          type: "violation" as const
+        })),
+        ...problems.map(p => ({
+          time: new Date(p.submittedAt).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' }),
+          event: `Solved ${p.problemName} (Score: ${p.rubric.output + p.rubric.testCases + p.rubric.timeComplexity + p.rubric.spaceComplexity}/8)`,
+          type: "info" as const
+        }))
+      ].sort((a,b) => b.time.localeCompare(a.time)).slice(0, 10);
+
       return {
         id: t.id,
         name: t.name,
         problems,
-        // Fallback defaults for hardening metrics (will be added in migration)
         status: t.status || "active",
         suspicion: t.suspicion || "low",
         warnings: t.warnings || 0,
-        timeline: [] 
+        timeline 
       };
     });
 

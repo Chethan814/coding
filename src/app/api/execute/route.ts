@@ -84,11 +84,29 @@ export async function POST(request: Request) {
 
     const result = await response.json();
 
+    // 3. Phase 1 Verification (Optional if problemId provided)
+    let isFirstCaseMatch = false;
+    if (problemId) {
+      const { data: tc } = await supabase
+        .from("test_cases")
+        .select("expected_output")
+        .eq("problem_id", problemId)
+        .limit(1)
+        .single();
+      
+      if (tc) {
+        const expectedNorm = (tc.expected_output || "").replace(/\s+/g, "").toLowerCase();
+        const actualNorm = (result.stdout || "").replace(/\s+/g, "").toLowerCase();
+        isFirstCaseMatch = actualNorm === expectedNorm && result.status?.id === 3;
+      }
+    }
+
     return NextResponse.json({
       stdout: result.stdout || "",
       stderr: result.stderr || result.compile_output || "",
       time: result.time || "0.000",
       memory: result.memory || 0,
+      isFirstCaseMatch,
       status: {
         id: result.status?.id || 3,
         description: result.status?.description || "Accepted"

@@ -49,8 +49,8 @@ export default function Admin() {
     return () => clearInterval(interval);
   }, []);
 
-  const handleUpdateRubric = (teamId: string, problemIdx: number, key: keyof RubricScore, value: number) => {
-    // Current manual override placeholder (Real implementation would update rubric_scores table)
+  const handleUpdateRubric = async (teamId: string, problemIdx: number, key: keyof RubricScore, value: number) => {
+    // 1. Optimistic UI Update
     setTeams((prev) =>
       prev.map((t) => {
         if (t.id !== teamId) return t;
@@ -64,7 +64,36 @@ export default function Admin() {
         };
       })
     );
-    toast.success("Score updated locally");
+
+    // 2. Persistent Backend Update
+    try {
+      const team = teams.find(t => t.id === teamId);
+      const problem = team?.problems[problemIdx];
+      
+      // We need the ACTUAL problem ID (not index) from the DB
+      // Assuming our TeamData structure has access to it.
+      // If not, we fetch it or it was already joined in the dashboard API.
+      // Looking at the dashboard API, bs.problems.id was joined.
+      
+      const res = await fetch("/api/admin/team-action", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          team_id: teamId, 
+          action: "update-rubric", 
+          key, 
+          value,
+          problem_idx: team?.problems[problemIdx].id // Passed as problem_idx but it's the id
+        })
+      });
+      
+      if (!res.ok) throw new Error("Failed to persist score");
+      toast.success("Score persisted to database");
+      fetchDashboardData(true);
+    } catch (err: any) {
+      toast.error(err.message);
+      fetchDashboardData(true); // Rollback
+    }
   };
 
   const handleToggleLock = (teamId: string, problemIdx: number) => {

@@ -64,12 +64,23 @@ export default function AdminTeams() {
   }
 
   async function deleteTeam(id: string) {
-    const { error } = await supabase.from("teams").delete().eq("id", id);
-    if (error) {
-      toast.error("Failed to delete team");
-    } else {
+    const confirmed = window.confirm("Are you sure? This will delete all submissions and scores for this team permanently.");
+    if (!confirmed) return;
+
+    try {
+      const res = await fetch("/api/admin/team-action", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ team_id: id, action: "delete" })
+      });
+      
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error);
+      
       setTeams(teams.filter(t => t.id !== id));
-      toast.success("Team removed");
+      toast.success(result.message || "Team scrubbed and removed");
+    } catch (err: any) {
+      toast.error(err.message);
     }
   }
 

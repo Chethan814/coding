@@ -232,9 +232,6 @@ export default function ProblemPage() {
     setOutputVal("Compiling and executing...");
     setFailureDetails(null);
     try {
-      // REQUEST PAYLOAD LOG
-      console.log("🚀 SENDING RUN REQUEST:", { source_code: code, language, stdin });
-
       const res = await fetch("/api/execute", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -246,9 +243,6 @@ export default function ProblemPage() {
         })
       });
       const result = await res.json();
-      
-      // RESPONSE LOG
-      console.log("📥 RECEIVED EXEC RESPONSE:", result);
       
       if (result.error) {
         setErrorVal(result.error);
@@ -266,7 +260,14 @@ export default function ProblemPage() {
         setCanSubmit(false);
       } else {
         setOutputStatus("success");
-        setCanSubmit(true);
+        // PHASE 1 LOCK: Only enable submit if the example test case (Phase 1) passed
+        if (result.isFirstCaseMatch) {
+          setCanSubmit(true);
+          toast.success("Phase 1 Passed! You can now submit for full evaluation.");
+        } else {
+          setCanSubmit(false);
+          toast.warning("Output mismatch. Fix your logic to enable the Submit button.");
+        }
       }
     } catch (e: any) {
       setErrorVal("Connection lost or server error. Please try again.");
@@ -317,7 +318,13 @@ export default function ProblemPage() {
         setOutputStatus("success");
         setIsSubmitted(true);
         setFailureDetails(null);
-        setOutputVal(`ACCEPTED! Score: ${result.rubric?.total_score || 0}/8\n\n${result.message}`);
+        
+        // Show metrics if available
+        const metricsStr = result.metrics 
+          ? `\n⏱️ Speed: ${result.metrics.timeValue}s | 💾 Memory: ${result.metrics.memoryValue}MB`
+          : "";
+          
+        setOutputVal(`ACCEPTED! Score: ${result.rubric?.totalScore || 0}/8\n${metricsStr}\n\n${result.message}`);
         toast.success("Submission Successful!");
       }
     } catch (e: any) {

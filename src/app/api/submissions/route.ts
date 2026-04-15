@@ -197,18 +197,24 @@ export async function POST(request: Request) {
       }
     }
 
-    // 5. Calculate Metrics
+    // 5. Calculate Metrics (Strict 4-Phase Rubric)
     const avgTime = totalTime / (testCases.length || 1);
     const memoryMB = maxMemory / 1024;
-    const allPassed = testCases.length > 0 && passedCount === testCases.length && results.length === testCases.length;
-    const firstTestPassed = results.length > 0 && results[0].isMatch;
+    
+    // Phase 1: First Case Check (Primary Example)
+    const firstCasePassed = results.length > 0 && results[0].isMatch;
+    const outputScore = firstCasePassed ? 2 : 0;
 
-    const outputScore = firstTestPassed ? 2 : 0;
+    // Phase 2: All Hidden Test Cases
+    const allPassed = testCases.length > 0 && passedCount === testCases.length && results.length === testCases.length;
     const tcScore = allPassed ? 2 : 0;
+
+    // Phase 3 & 4 (Speed & Space) - Dependency: MUST pass Phase 2 first
     let timeScore = 0;
     let spaceScore = 0;
 
-    if (outputScore === 2 && tcScore === 2) {
+    if (allPassed) {
+      // Points only if correct; threshold: < 1.0s and < 64MB for full points
       timeScore = avgTime < 1.0 ? 2 : avgTime < 2.0 ? 1 : 0;
       spaceScore = memoryMB < 64 ? 2 : memoryMB < 128 ? 1 : 0;
     }
@@ -218,7 +224,7 @@ export async function POST(request: Request) {
 
     // 6. MULTI-TABLE PERSISTENCE (Using Admin client to bypass RLS)
     
-    // 6a. Insert Submission (With Resilient Fallback for missing columns)
+    // 6a. Insert Submission
     let subData: any = null;
     let subError: any = null;
 
@@ -242,9 +248,8 @@ export async function POST(request: Request) {
       subData = result.data;
       subError = result.error;
 
-      // If column is missing (code 42703), retry without metrics
+      // Retry without metrics if columns are missing
       if (subError?.code === "42703") {
-        console.warn("⚠️ Database columns 'execution_time' or 'execution_memory' missing. Retrying without metrics.");
         const retryResult = await supabaseAdmin
           .from("submissions")
           .insert({
@@ -267,7 +272,7 @@ export async function POST(request: Request) {
 
     if (subError || !subData) throw subError || new Error("Failed to insert submission");
 
-    // 6b. Insert Rubric Score (using exact schema column names)
+    // 6b. Insert Rubric Score
     await supabaseAdmin.from("rubric_scores").insert({
       submission_id: subData.id,
       output_score: outputScore,
@@ -296,19 +301,13 @@ export async function POST(request: Request) {
       }
 
       // 6d. Recalculate Leaderboard
-      // 1. Get event_id for this problem
       const { data: probData } = await supabaseAdmin.from("problems").select("event_id").eq("id", problemId).single();
-      const eventId = probData?.event_id;
-
-      if (eventId) {
-        // 2. Sum best scores for this team/event
+      if (probData?.event_id) {
         const { data: allBest } = await supabaseAdmin.from("best_scores").select("best_score").eq("team_id", safeTeamId);
         const teamTotal = (allBest || []).reduce((sum, b) => sum + (b.best_score || 0), 0);
-
-        // 3. Update leaderboard table
         await supabaseAdmin.from("leaderboard").upsert({
           team_id: safeTeamId,
-          event_id: eventId,
+          event_id: probData.event_id,
           total_score: teamTotal,
           last_submission_time: new Date().toISOString(),
           updated_at: new Date().toISOString()
@@ -319,6 +318,11 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       status,
+      firstCaseMatch: firstCasePassed,
+      metrics: {
+        timeValue: avgTime.toFixed(3),
+        memoryValue: memoryMB.toFixed(1)
+      },
       rubric: { 
         outputScore, 
         tcScore, 
@@ -328,7 +332,7 @@ export async function POST(request: Request) {
       },
       message: firstFailure?.status === "Compilation Error" || firstFailure?.status === "Wrong Signature"
         ? firstFailure.error
-        : `${passedCount}/${testCases.length} cases passed. Score: ${currentTotal}/8`,
+        : `${passedCount}/${testCases.length} cases passed. Total Score: ${currentTotal}/8`,
     });
 
   } catch (error: any) {

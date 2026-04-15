@@ -51,9 +51,16 @@ export default function AdminEvents() {
       const { data: event } = await supabase.from("events").select("id").limit(1).single();
       
       if (event) {
+        const updateData: any = { status: newStatus };
+        if (newStatus === "live") {
+          updateData.live_at = new Date().toISOString();
+        } else if (newStatus === "not_started" || newStatus === "instructions") {
+          updateData.live_at = null; // Reset deadline
+        }
+
         const { error } = await supabase
           .from("events")
-          .update({ status: newStatus })
+          .update(updateData)
           .eq("id", event.id);
           
         if (error) throw error;
@@ -73,28 +80,86 @@ export default function AdminEvents() {
     }
   };
 
+  const downloadResults = async () => {
+    try {
+      toast.loading("Preparing CSV export...");
+      const res = await fetch("/api/admin/dashboard");
+      const teams = await res.json();
+      
+      if (!teams || teams.length === 0) {
+        toast.error("No team data available to export.");
+        return;
+      }
+
+      // 1. Define CSV headers
+      const headers = ["Rank", "Team Name", "Status", "Total Score", "Output", "Test Cases", "Time Pts", "Space Pts", "Timestamp"];
+      
+      // 2. Format rows
+      const rows = teams
+        .sort((a: any, b: any) => {
+          const scoreA = a.problems.reduce((sum: number, p: any) => sum + (p.rubric.output + p.rubric.testCases + p.rubric.timeComplexity + p.rubric.spaceComplexity), 0);
+          const scoreB = b.problems.reduce((sum: number, p: any) => sum + (p.rubric.output + p.rubric.testCases + p.rubric.timeComplexity + p.rubric.spaceComplexity), 0);
+          return scoreB - scoreA;
+        })
+        .map((t: any, idx: number) => {
+          const scores = t.problems.reduce((acc: any, p: any) => {
+            acc.out += p.rubric.output;
+            acc.tc += p.rubric.testCases;
+            acc.time += p.rubric.timeComplexity;
+            acc.space += p.rubric.spaceComplexity;
+            return acc;
+          }, { out: 0, tc: 0, time: 0, space: 0 });
+          
+          const totalScore = scores.out + scores.tc + scores.time + scores.space;
+          
+          return [
+            idx + 1,
+            t.name,
+            t.status,
+            totalScore,
+            scores.out,
+            scores.tc,
+            scores.time,
+            scores.space,
+            new Date().toISOString()
+          ].join(",");
+        });
+
+      // 3. Create Blob and Download
+      const csvContent = [headers.join(","), ...rows].join("\n");
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const link = document.createElement("a");
+      const url = URL.createObjectURL(blob);
+      link.setAttribute("href", url);
+      link.setAttribute("download", `CodeArena_Results_${new Date().toLocaleDateString()}.csv`);
+      link.style.visibility = "hidden";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      toast.dismiss();
+      toast.success("Leaderboard exported successfully!");
+    } catch (err: any) {
+      toast.error("Export Failed: " + err.message);
+    }
+  };
+
   const handleHardReset = async () => {
     const confirmed = window.confirm(
-      "CRITICAL ACTION: This will permanently delete ALL teams, submissions, and rubric scores. The competition will be reset to the lobby. Proceed?"
+      "NUCLEAR OPTION: This will permanently delete ALL teams, submissions, and rubric scores. This is irreversible. Proceed?"
     );
 
     if (!confirmed) return;
 
     setLoading(true);
     try {
-      // 1. Delete all Rubric Scores (Foreign Key dependent)
-      await supabase.from("rubric_scores").delete().neq("id", "00000000-0000-0000-0000-000000000000"); // Standard way to delete all in some drivers, or just match all
+      const res = await fetch("/api/admin/reset-contest", { method: "POST" });
+      const result = await res.json();
+      
+      if (!res.ok) throw new Error(result.error);
 
-      // 2. Delete all Submissions
-      await supabase.from("submissions").delete().neq("id", "00000000-0000-0000-0000-000000000000");
-
-      // 3. Delete all Teams
-      await supabase.from("teams").delete().neq("id", "00000000-0000-0000-0000-000000000000");
-
-      // 4. Reset Event Status
-      await updateStatus("not_started");
-
-      toast.success("ARENA PURGED: All data cleared for new session.");
+      setStatus("not_started");
+      toast.success(result.message || "Arena purged and reset.");
     } catch (err: any) {
       toast.error("Wipe Failed: " + err.message);
     } finally {
@@ -189,14 +254,23 @@ export default function AdminEvents() {
                   </h4>
                   <p className="text-[10px] text-muted-foreground italic">These actions cannot be undone. All participant data will be purged.</p>
                </div>
-               <Button 
-                 variant="destructive" 
-                 className="w-full gap-2 font-mono text-xs uppercase"
-                 disabled={loading}
-                 onClick={handleHardReset}
-               >
-                 <Trash2 className="h-4 w-4" /> Hard Reset Arena
-               </Button>
+                <div className="flex flex-col gap-2">
+                   <Button 
+                     variant="outline" 
+                     className="w-full gap-2 font-mono text-xs uppercase"
+                     onClick={downloadResults}
+                   >
+                     <Settings2 className="h-4 w-4" /> Export Standings (CSV)
+                   </Button>
+                   <Button 
+                     variant="destructive" 
+                     className="w-full gap-2 font-mono text-xs uppercase"
+                     disabled={loading}
+                     onClick={handleHardReset}
+                   >
+                     <Trash2 className="h-4 w-4" /> Hard Reset Arena
+                   </Button>
+                </div>
             </div>
           </CardContent>
         </Card>
