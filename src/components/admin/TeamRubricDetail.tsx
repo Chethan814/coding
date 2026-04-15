@@ -90,40 +90,51 @@ const TeamRubricDetail = ({ team, onUpdateRubric, onToggleLock, onReevaluate }: 
                         const val = problem.rubric[key];
                         const isEditing = editingCell === cellId && !isLocked;
                         
+                        const isTime = key === "timeComplexity";
+                        const isSpace = key === "spaceComplexity";
+                        const actualVal = isTime ? problem.rubric.actualTime : isSpace ? problem.rubric.actualMemory : null;
+                        
                         return (
                           <td key={key} className="py-3.5 text-center px-1">
-                            {isEditing ? (
-                              <div className="flex items-center justify-center gap-0.5">
-                                {[0, 1, 2].map((v) => (
-                                  <button
-                                    key={v}
-                                    onClick={() => { onUpdateRubric(team.id, idx, key, v); setEditingCell(null); }}
-                                    className={cn(
-                                      "w-6 h-6 rounded text-xs font-mono font-bold transition-all",
-                                      v === val
-                                        ? "bg-primary text-primary-foreground scale-110 shadow-sm"
-                                        : "bg-secondary text-muted-foreground hover:bg-muted"
-                                    )}
-                                  >
-                                    {v}
-                                  </button>
-                                ))}
-                              </div>
-                            ) : (
-                              <button
-                                onClick={() => !isLocked && setEditingCell(cellId)}
-                                disabled={isLocked}
-                                className={cn(
-                                  "font-mono font-bold text-sm min-w-[3rem] px-2 py-1 rounded transition-all",
-                                  val === 2 ? "text-success bg-success/10" : 
-                                  val === 1 ? "text-warning bg-warning/10" : "text-destructive/80 bg-destructive/10",
-                                  !isLocked && "hover:ring-1 ring-border cursor-pointer hover:bg-muted",
-                                  isLocked && "opacity-60 cursor-not-allowed"
-                                )}
-                              >
-                                {val}
-                              </button>
-                            )}
+                            <div className="flex flex-col items-center gap-1">
+                              {isEditing ? (
+                                <div className="flex items-center justify-center gap-0.5">
+                                  {[0, 1, 2].map((v) => (
+                                    <button
+                                      key={v}
+                                      onClick={() => { onUpdateRubric(team.id, idx, key, v); setEditingCell(null); }}
+                                      className={cn(
+                                        "w-6 h-6 rounded text-xs font-mono font-bold transition-all",
+                                        v === val
+                                          ? "bg-primary text-primary-foreground scale-110 shadow-sm"
+                                          : "bg-secondary text-muted-foreground hover:bg-muted"
+                                      )}
+                                    >
+                                      {v}
+                                    </button>
+                                  ))}
+                                </div>
+                              ) : (
+                                <button
+                                  onClick={() => !isLocked && setEditingCell(cellId)}
+                                  disabled={isLocked}
+                                  className={cn(
+                                    "font-mono font-bold text-sm min-w-[3rem] px-2 py-1 rounded transition-all",
+                                    val === 2 ? "text-success bg-success/10" : 
+                                    val === 1 ? "text-warning bg-warning/10" : "text-destructive/80 bg-destructive/10",
+                                    !isLocked && "hover:ring-1 ring-border cursor-pointer hover:bg-muted",
+                                    isLocked && "opacity-60 cursor-not-allowed"
+                                  )}
+                                >
+                                  {val}
+                                </button>
+                              )}
+                              {actualVal !== undefined && actualVal !== null && (
+                                <span className="text-[9px] font-mono text-muted-foreground">
+                                  {actualVal}{isTime ? "s" : "MB"}
+                                </span>
+                              )}
+                            </div>
                           </td>
                         );
                       })}

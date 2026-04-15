@@ -3,6 +3,8 @@ export interface RubricScore {
   testCases: number;       // 0-2 (Maps to test_case_score)
   timeComplexity: number;  // 0-2 (Maps to time_complexity_score)
   spaceComplexity: number; // 0-2 (Maps to space_complexity_score)
+  actualTime?: number;     // Actual execution time in seconds
+  actualMemory?: number;   // Actual memory usage in MB
 }
 
 export interface ProblemResult {

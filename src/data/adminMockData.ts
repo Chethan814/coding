@@ -8,11 +8,11 @@ export const teamsData: TeamData[] = [
     status: "active",
     warnings: 0,
     problems: [
-      { problemName: "Two Sum", rubric: { output: 2, testCases: 2, timeComplexity: 2, spaceComplexity: 2 }, locked: true, submittedAt: "09:15" },
-      { problemName: "Merge Sort", rubric: { output: 2, testCases: 2, timeComplexity: 1, spaceComplexity: 2 }, locked: false, submittedAt: "09:38" },
-      { problemName: "Binary Search", rubric: { output: 2, testCases: 1, timeComplexity: 2, spaceComplexity: 1 }, locked: false, submittedAt: "09:55" },
-      { problemName: "Graph BFS", rubric: { output: 1, testCases: 2, timeComplexity: 1, spaceComplexity: 2 }, locked: false, submittedAt: "10:12" },
-      { problemName: "DP Fibonacci", rubric: { output: 2, testCases: 2, timeComplexity: 2, spaceComplexity: 1 }, locked: false, submittedAt: "10:28" },
+      { problemName: "Two Sum", rubric: { output: 2, testCases: 2, timeComplexity: 2, spaceComplexity: 2, actualTime: 0.15, actualMemory: 12.4 }, locked: true, submittedAt: "09:15" },
+      { problemName: "Merge Sort", rubric: { output: 2, testCases: 2, timeComplexity: 1, spaceComplexity: 2, actualTime: 1.25, actualMemory: 45.2 }, locked: false, submittedAt: "09:38" },
+      { problemName: "Binary Search", rubric: { output: 2, testCases: 1, timeComplexity: 2, spaceComplexity: 1, actualTime: 0.08, actualMemory: 8.1 }, locked: false, submittedAt: "09:55" },
+      { problemName: "Graph BFS", rubric: { output: 1, testCases: 2, timeComplexity: 1, spaceComplexity: 2, actualTime: 1.82, actualMemory: 62.5 }, locked: false, submittedAt: "10:12" },
+      { problemName: "DP Fibonacci", rubric: { output: 2, testCases: 2, timeComplexity: 2, spaceComplexity: 1, actualTime: 0.05, actualMemory: 4.2 }, locked: false, submittedAt: "10:28" },
     ],
     timeline: [
       { time: "09:00", event: "Event started", type: "info" },

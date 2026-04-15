@@ -99,14 +99,18 @@ export async function POST(request: Request) {
 
     // c. Time Efficiency (2 pts)
     let timeScore = 0;
-    if (avgTime <= 1.0) timeScore = 2;
-    else if (avgTime <= 2.0) timeScore = 1;
+    if (allPassed) {
+      if (avgTime <= 1.0) timeScore = 2;
+      else if (avgTime <= 2.0) timeScore = 1;
+    }
 
     // d. Space Efficiency (2 pts)
     let spaceScore = 0;
     const memoryMB = maxMemory / 1024; // Convert KB to MB
-    if (memoryMB <= 64) spaceScore = 2;
-    else if (memoryMB <= 128) spaceScore = 1;
+    if (allPassed) {
+      if (memoryMB <= 64) spaceScore = 2;
+      else if (memoryMB <= 128) spaceScore = 1;
+    }
 
     const totalScore = outputScore + tcScore + timeScore + spaceScore;
     const status = allPassed ? "accepted" : (passedCount > 0 ? "partial" : "wrong");
@@ -119,7 +123,9 @@ export async function POST(request: Request) {
       code,
       language,
       output: lastStdout,
-      status
+      status,
+      execution_time: avgTime,
+      execution_memory: memoryMB
     }).select("id").single();
 
     if (subData) {
@@ -130,7 +136,9 @@ export async function POST(request: Request) {
         test_case_score: tcScore,
         time_complexity_score: timeScore,
         space_complexity_score: spaceScore,
-        total_score: totalScore
+        total_score: totalScore,
+        execution_time: avgTime,
+        execution_memory: memoryMB
       });
 
       // 5. Update Leaderboard (Total Score)
