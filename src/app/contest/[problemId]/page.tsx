@@ -125,7 +125,8 @@ export default function ProblemPage() {
         body: JSON.stringify({ 
           source_code: code, 
           language: language, 
-          stdin: stdin 
+          stdin: stdin,
+          problemId: problemId 
         })
       });
       const result = await res.json();
@@ -237,6 +238,7 @@ export default function ProblemPage() {
               onRun={handleRun} 
               onSubmit={handleSubmit} 
               defaultStdin={problem?.firstTestCase}
+              problemId={problemId}
             />
           </div>
           <div className="h-[250px] bg-card border border-border rounded-xl">

@@ -38,8 +38,16 @@ export default function EditProblem() {
     difficulty: "Medium",
     type: "coding",
     points: 8,
-    order_index: 0
+    order_index: 0,
+    function_name: "solve",
+    parameters: [] as string[],
+    parameter_types: [] as string[],
+    input_type: "single",
+    output_type: "single"
   });
+
+  const [paramInput, setParamInput] = useState("");
+  const [typeInput, setTypeInput] = useState("");
 
   useEffect(() => {
     async function fetchProblem() {
@@ -58,8 +66,15 @@ export default function EditProblem() {
           difficulty: data.difficulty || "Medium",
           type: data.type || "coding",
           points: 8, // Force 8 even if DB has something else
-          order_index: data.order_index || 0
+          order_index: data.order_index || 0,
+          function_name: data.function_name || "solve",
+          parameters: data.parameters || [],
+          parameter_types: data.parameter_types || [],
+          input_type: data.input_type || "single",
+          output_type: data.output_type || "single"
         });
+        setParamInput((data.parameters || []).join(", "));
+        setTypeInput((data.parameter_types || []).join(", "));
       }
       setLoading(false);
     }
@@ -71,9 +86,22 @@ export default function EditProblem() {
     setSaving(true);
     
     try {
+      const params = paramInput.split(",").map(p => p.trim()).filter(p => p !== "");
+      const types = typeInput.split(",").map(t => t.trim()).filter(t => t !== "");
+
+      if (params.length === 0) throw new Error("At least one parameter is required (e.g. a, b)");
+      if (types.length === 0) throw new Error("Parameter types are required (e.g. int, int)");
+      if (params.length !== types.length) throw new Error("Parameters and types count must match");
+
+      const finalData = {
+        ...formData,
+        parameters: params,
+        parameter_types: types
+      };
+
       const { error } = await supabase
         .from("problems")
-        .update(formData)
+        .update(finalData)
         .eq("id", id);
         
       if (error) throw error;
@@ -270,15 +298,71 @@ export default function EditProblem() {
 
                 <div className="space-y-2">
                   <Label htmlFor="order">List Order (Index)</Label>
-                  <Input 
-                    id="order" 
-                    type="number"
-                    value={formData.order_index}
-                    onChange={(e) => {
-                      const val = parseInt(e.target.value);
-                      setFormData({...formData, order_index: isNaN(val) ? 0 : val});
-                    }}
                   />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-primary/20 bg-primary/5">
+              <CardHeader className="py-3">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  Logic Engine Config
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 pb-4">
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] uppercase font-bold">Function Name</Label>
+                  <Input 
+                    value={formData.function_name}
+                    onChange={(e) => setFormData({...formData, function_name: e.target.value})}
+                    placeholder="e.g. solve"
+                    className="h-8 text-xs font-mono"
+                    required
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] uppercase font-bold">Parameters (Comma separated)</Label>
+                  <Input 
+                    value={paramInput}
+                    onChange={(e) => setParamInput(e.target.value)}
+                    placeholder="a, b"
+                    className="h-8 text-xs font-mono"
+                    required
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] uppercase font-bold">Parameter Types (int, int_array, string)</Label>
+                  <Input 
+                    value={typeInput}
+                    onChange={(e) => setTypeInput(e.target.value)}
+                    placeholder="int, int"
+                    className="h-8 text-xs font-mono"
+                    required
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                   <div className="space-y-1.5">
+                      <Label className="text-[10px] uppercase font-bold">Input Type</Label>
+                      <Select value={formData.input_type} onValueChange={(v) => setFormData({...formData, input_type: v})}>
+                        <SelectTrigger className="h-8 text-[10px]"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="single">Single Value</SelectItem>
+                          <SelectItem value="array">Array</SelectItem>
+                        </SelectContent>
+                      </Select>
+                   </div>
+                   <div className="space-y-1.5">
+                      <Label className="text-[10px] uppercase font-bold">Output Type</Label>
+                      <Select value={formData.output_type} onValueChange={(v) => setFormData({...formData, output_type: v})}>
+                        <SelectTrigger className="h-8 text-[10px]"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="single">Integer/Number</SelectItem>
+                          <SelectItem value="long">Long (BigInt)</SelectItem>
+                          <SelectItem value="string">String</SelectItem>
+                          <SelectItem value="array">Array/List</SelectItem>
+                        </SelectContent>
+                      </Select>
+                   </div>
                 </div>
               </CardContent>
             </Card>

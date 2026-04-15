@@ -1,52 +1,89 @@
 import { NextResponse } from "next/server";
+import { supabase } from "@/lib/supabase";
+import { generateWrapper, ProblemMetadata } from "@/lib/code-wrappers";
 
-// Judge0 Language IDs mapping
+// Judge0 Language IDs
 const LANGUAGE_MAP: Record<string, number> = {
-  python: 71, // Python 3
-  c: 50,      // C (GCC 9.2.0)
-  java: 62,   // Java (OpenJDK 13.0.1)
+  python: 71,
+  cpp: 54,
+  c: 50,
+  java: 62,
+  javascript: 63,
+  typescript: 74,
+  go: 60,
+  rust: 73,
+  php: 68,
 };
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { source_code, language, stdin } = body;
+    const { source_code, language, stdin, problemId } = body;
     
-    // BACKEND NORMALIZATION: Convert [1,2,3] or 1,2,3 to 1 2 3
-    // This prevents "ValueError: invalid literal for int()" in Python/C/Java
-    const normalizedStdin = (stdin || "")
-      .replace(/[\[\]]/g, "") // Remove brackets
-      .replace(/,/g, " ");    // Replace commas with spaces
+    // Fetch problem metadata if problemId is provided
+    let problem: ProblemMetadata | null = null;
+    if (problemId) {
+      const { data } = await supabase
+        .from("problems")
+        .select("function_name, parameters, parameter_types, input_type, output_type")
+        .eq("id", problemId)
+        .single();
+      problem = data;
+    }
 
-    // DEBUG LOGS
-    console.log("--- INCOMING EXEC REQUEST ---");
-    console.log("Language:", language);
-    console.log("Stdin (Raw):", stdin);
-    console.log("Stdin (Normalized):", normalizedStdin);
+    if (problem) {
+      if (!problem.parameters || problem.parameters.length === 0) {
+        return NextResponse.json({ 
+          error: "Problem is not configured properly (missing parameters)",
+          status: { id: 6, description: "System Error" }
+        }, { status: 400 });
+      }
+
+      if (!problem.parameter_types || problem.parameter_types.length === 0) {
+        return NextResponse.json({ 
+          error: "Problem is not configured properly (missing parameter types)",
+          status: { id: 6, description: "System Error" }
+        }, { status: 400 });
+      }
+
+      // 1. PRE-VALIDATION: Solve Detection
+      if (!source_code.includes(`${problem.function_name}(`)) {
+        return NextResponse.json({ 
+          error: `Function '${problem.function_name}' not found in your code.`,
+          status: { id: 6, description: "Compilation Error" } 
+        }, { status: 400 });
+      }
+
+      // 2. INPUT GUARD: Basic presence check
+      if ((problem.input_type === "array" || problem.input_type === "int_array") && !stdin) {
+         return NextResponse.json({ 
+          error: "Invalid input format. Array problems require [size] [elements].",
+          status: { id: 6, description: "Invalid Input" } 
+        }, { status: 400 });
+      }
+    }
+
+    // Wrap code if problem metadata is available
+    const finalCode = problem 
+      ? generateWrapper(source_code, problem, language) 
+      : source_code;
 
     const languageId = LANGUAGE_MAP[language] || 71;
 
-    // Call Judge0 API (Public CE instance)
+    console.log(`[EXEC] Lang: ${language}, Problem: ${problemId || "None"}`);
+
     const response = await fetch("https://ce.judge0.com/submissions?base64_encoded=false&wait=true", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        source_code,
+        source_code: finalCode,
         language_id: languageId,
-        stdin: normalizedStdin,
+        stdin: stdin || "",
       }),
     });
 
     const result = await response.json();
 
-    // DEBUG LOGS
-    console.log("--- JUDGE0 RESPONSE ---");
-    console.log("Status:", result.status?.description);
-    console.log("Stdout Length:", result.stdout?.length || 0);
-
-    // Standardize Judge0 response for our UI
     return NextResponse.json({
       stdout: result.stdout || "",
       stderr: result.stderr || result.compile_output || "",

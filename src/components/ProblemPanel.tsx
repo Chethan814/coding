@@ -110,12 +110,13 @@ const ProblemPanel = ({
              Execution Rules
            </h3>
            <p className="text-[11px] text-muted-foreground leading-relaxed">
-             Your code must read from <span className="text-primary font-bold">Standard Input (stdin)</span> and print its results to <span className="text-primary font-bold">Standard Output (stdout)</span>.
+             Read from <span className="text-primary font-bold">stdin</span> and print to <span className="text-primary font-bold">stdout</span>.
            </p>
            <ul className="text-[10px] space-y-1 text-muted-foreground/80 list-disc ml-4">
-             <li>C: Use <code className="text-primary">scanf</code> or <code className="text-primary">gets</code></li>
-             <li>Python: Use <code className="text-primary">input()</code> or <code className="text-primary">sys.stdin</code></li>
-             <li>Java: Use <code className="text-primary">Scanner(System.in)</code> inside <code className="text-primary">public class Main</code></li>
+             <li><span className="text-foreground font-semibold">Format:</span> Treat inputs as <span className="text-primary">space-separated values</span>.</li>
+             <li>Python: Use <code className="text-primary">input().split()</code></li>
+             <li>C: Use <code className="text-primary">scanf("%d", &n)</code> inside a loop.</li>
+             <li>Java: Use <code className="text-primary">sc.next()</code> or <code className="text-primary">sc.nextInt()</code>.</li>
            </ul>
         </div>
       </div>

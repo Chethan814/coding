@@ -1,5 +1,7 @@
-import { useState, useEffect } from "react";
-import { Play, Send, ChevronDown } from "lucide-react";
+"use client";
+
+import { useState, useEffect, useRef, useCallback } from "react";
+import { Code2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -8,165 +10,195 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
+import { Editor, type Monaco } from "@monaco-editor/react";
+import { supabase } from "@/lib/supabase";
+import { toast } from "sonner";
 
-interface CodeEditorProps {
-  onRun?: (code: string, language: string, stdin: string) => void;
-  onSubmit?: (code: string, language: string) => void;
-  defaultStdin?: string;
+const SITE_THEME_ID = "codearena-dark";
+
+function defineEditorTheme(monaco: Monaco) {
+  monaco.editor.defineTheme(SITE_THEME_ID, {
+    base: "vs-dark",
+    inherit: true,
+    rules: [{ token: "", foreground: "f8fafc", background: "0f172a" }],
+    colors: {
+      "editor.background": "#0f172a",
+      "editor.foreground": "#f8fafc",
+      "editorLineNumber.foreground": "#2a3f5f",
+      "editorGutter.background": "#0d1526",
+    },
+  });
 }
 
-const TEMPLATES: Record<string, string> = {
-  c: `// C Language - Competitive Programming Template
-#include <stdio.h>
-
-int main() {
-    int a, b;
-    
-    // IMPORTANT: Read input from stdin
-    // Example: Reading two space-separated integers
-    if (scanf("%d %d", &a, &b) == 2) {
-        // Print output to stdout
-        printf("%d\\n", a + b);
-    }
-    
-    return 0;
-}`,
-  python: `# Python 3 - Competitive Programming Template
-import sys
-
-def solve():
-    # IMPORTANT: Read input from stdin
-    # Example: Reading all numbers from space-separated input
-    line = sys.stdin.read()
-    if line:
-        nums = list(map(int, line.split()))
-        
-        # Print results to stdout
-        if len(nums) >= 2:
-            print(nums[0] + nums[1])
-
-if __name__ == "__main__":
-    solve()`,
-  java: `// Java - Competitive Programming Template
-// IMPORTANT: Use "public class Main" for Judge0
-import java.util.*;
-
-public class Main {
-    public static void main(String[] args) {
-        Scanner sc = new Scanner(System.in);
-        
-        // IMPORTANT: Read input from System.in
-        // Example: Reading integers until EOF
-        if (sc.hasNextInt()) {
-            int a = sc.nextInt();
-            int b = sc.nextInt();
-            
-            // Print output to System.out
-            System.out.println(a + b);
-        }
-    }
-}`,
-};
-
-const CodeEditor = ({ onRun, onSubmit, defaultStdin = "" }: CodeEditorProps) => {
-  const [language, setLanguage] = useState("python"); // Changed default to Python for convenience
-  const [code, setCode] = useState(TEMPLATES.python);
-  const [stdin, setStdin] = useState(defaultStdin);
+const CodeEditor = ({ onRun, onSubmit, problemId, defaultStdin }: { onRun: any, onSubmit: any, problemId: string, defaultStdin?: string }) => {
+  const [language, setLanguage] = useState("python");
+  const [code, setCode] = useState("");
   const [isRunning, setIsRunning] = useState(false);
+  const themeRegistered = useRef(false);
+  const [metadata, setMetadata] = useState<any>(null);
+  const [generatedSignature, setGeneratedSignature] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (defaultStdin && !stdin) {
-      setStdin(defaultStdin);
+    async function fetchMetadata() {
+      const { data } = await supabase
+        .from("problems")
+        .select("function_name, parameters, parameter_types, output_type")
+        .eq("id", problemId)
+        .single();
+      if (data) {
+        if (!data.parameters || data.parameters.length === 0) {
+          setError("This problem is misconfigured (missing parameters). Contact admin.");
+        } else {
+          setMetadata(data);
+        }
+      }
     }
-  }, [defaultStdin]);
+    if (problemId) fetchMetadata();
+  }, [problemId]);
 
-  const handleLanguageChange = (val: string) => {
-    setLanguage(val);
-    setCode(TEMPLATES[val] || "");
+  const getSignatureLine = useCallback((lang: string, meta: any) => {
+    if (!meta) return "";
+    const { function_name, parameters, parameter_types, output_type } = meta;
+    
+    // Type Mapping
+    const typeMap: Record<string, any> = {
+      python: { int: "int", long: "int", string: "str", int_array: "list[int]", string_array: "list[str]" },
+      c: { int: "int", long: "long long", string: "char*", int_array: "int*", string_array: "char**" },
+      java: { int: "int", long: "long", string: "String", int_array: "int[]", string_array: "String[]" }
+    };
+
+    const outTypeMap: Record<string, any> = {
+      python: "",
+      c: { single: "int", array: "int*", string: "char*", long: "long long" },
+      java: { single: "int", array: "int[]", string: "String", long: "long" }
+    };
+
+    const pTypes = typeMap[lang] || {};
+    const args: string[] = [];
+
+    for (let i = 0; i < parameters.length; i++) {
+        const typeKey = parameter_types[i];
+        const name = parameters[i];
+        if (lang === "python") {
+            args.push(name);
+        } else if (lang === "c") {
+            args.push(`${pTypes[typeKey] || "int"} ${name}`);
+            if (typeKey === "int_array") args.push(`int ${name}_size`);
+        } else if (lang === "java") {
+            args.push(`${pTypes[typeKey] || "int"} ${name}`);
+        }
+    }
+
+    if (lang === "python") {
+        return `def ${function_name}(${args.join(", ")}):`;
+    } else if (lang === "c") {
+        const out = outTypeMap.c[output_type] || "int";
+        return `${out} ${function_name}(${args.join(", ")}) {`;
+    } else if (lang === "java") {
+        const out = outTypeMap.java[output_type] || "int";
+        return `public static ${out} ${function_name}(${args.join(", ")}) {`;
+    }
+    return "";
+  }, []);
+
+  useEffect(() => {
+    if (!metadata) return;
+    const sig = getSignatureLine(language, metadata);
+    setGeneratedSignature(sig);
+
+    const body = language === "python" ? "    # Write your logic here\n    pass" : "    // Write your logic here\n    return 0;\n}";
+    setCode(`${sig}\n${body}`);
+  }, [language, metadata, getSignatureLine]);
+
+  const validateSignature = () => {
+    const lines = code.split("\n");
+    const firstLine = lines[0].trim();
+    if (firstLine !== generatedSignature.trim()) {
+        toast.error("Signature Mismatch", {
+            description: "Do not modify the first line (function signature).",
+            icon: <AlertCircle className="h-4 w-4" />
+        });
+        return false;
+    }
+    return true;
   };
 
-  const handleRun = () => {
+  const handleRun = async () => {
+    if (!validateSignature()) return;
     setIsRunning(true);
-    onRun?.(code, language, stdin);
-    // Loading state is now handled by the parent's response
-    setTimeout(() => setIsRunning(false), 3000);
+    try {
+      await onRun?.(code, language, defaultStdin || "");
+    } finally {
+      setIsRunning(false);
+    }
   };
 
-  const handleSubmit = () => {
-    onSubmit?.(code, language);
+  const handleSubmit = async () => {
+    if (!validateSignature()) return;
+    await onSubmit?.(code, language);
   };
 
   return (
-    <div className="h-full flex flex-col overflow-hidden">
-      <div className="panel-header flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Editor</span>
+    <div className="h-full flex flex-col overflow-hidden rounded-xl border border-border bg-[#0f172a]">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-[#0d1526]">
+        <div className="flex items-center gap-4">
+          <Code2 className="h-4 w-4 text-primary" />
+          <div className="flex flex-col">
+            <span className="text-[10px] font-bold text-white uppercase tracking-wider text-primary anim-pulse">Logic-Only Mode</span>
+            <span className="text-[9px] text-muted-foreground">{error ? "Config Error" : "Signature Guard Active"}</span>
+          </div>
         </div>
-        <Select value={language} onValueChange={handleLanguageChange}>
-          <SelectTrigger className="w-28 h-7 text-xs bg-muted border-border focus:ring-1 focus:ring-primary">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="c">C (GCC)</SelectItem>
-            <SelectItem value="python">Python 3</SelectItem>
-            <SelectItem value="java">Java 17</SelectItem>
-          </SelectContent>
-        </Select>
+
+        {error ? (
+          <div className="flex items-center gap-2 px-3 py-1 bg-destructive/10 border border-destructive/20 rounded text-[10px] text-destructive font-bold uppercase">
+            <AlertCircle className="h-3 w-3" />
+            {error}
+          </div>
+        ) : (
+          <Select value={language} onValueChange={setLanguage}>
+            <SelectTrigger className="w-36 h-8 text-xs bg-[#1e2d45] border-[#2a3f5f] text-white">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="bg-[#131e33] border-[#2a3f5f]">
+              <SelectItem value="python">Python 3</SelectItem>
+              <SelectItem value="c">C (GCC)</SelectItem>
+              <SelectItem value="java">Java 17</SelectItem>
+            </SelectContent>
+          </Select>
+        )}
       </div>
 
-      <div className="flex-1 overflow-hidden flex flex-col">
-        <div className="flex-1 relative overflow-hidden">
-          <div className="absolute inset-0 flex">
-            {/* Line numbers */}
-            <div className="w-12 bg-muted/50 border-r border-border py-3 text-right pr-2 overflow-hidden">
-              {code.split("\n").map((_, i) => (
-                <div key={i} className="font-mono text-xs text-muted-foreground leading-5">
-                  {i + 1}
-                </div>
-              ))}
+      <div className="flex-1 relative">
+        {error ? (
+          <div className="absolute inset-0 flex items-center justify-center bg-background/50 backdrop-blur-sm z-50">
+            <div className="max-w-md p-6 bg-card border border-destructive/50 rounded-xl text-center space-y-4 shadow-2xl">
+              <AlertCircle className="h-12 w-12 text-destructive mx-auto" />
+              <h3 className="text-lg font-bold">System Configuration Mismatch</h3>
+              <p className="text-sm text-muted-foreground">{error}</p>
+              <Button variant="outline" onClick={() => window.location.reload()}>Retry Connection</Button>
             </div>
-            {/* Code area */}
-            <textarea
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              className="flex-1 bg-transparent p-3 font-mono text-xs leading-5 text-foreground resize-none outline-none overflow-auto"
-              spellCheck={false}
-            />
           </div>
-        </div>
-
-        {/* Stdin */}
-        <div className="border-t border-border">
-          <div className="px-3 py-1.5 text-xs text-muted-foreground uppercase tracking-wider">
-            Stdin
-          </div>
-          <Textarea
-            value={stdin}
-            onChange={(e) => setStdin(e.target.value)}
-            placeholder="Enter input..."
-            className="border-0 rounded-none bg-transparent font-mono text-xs h-16 resize-none focus-visible:ring-0"
+        ) : (
+          <Editor
+            height="100%"
+            language={language}
+            value={code}
+            theme={SITE_THEME_ID}
+            onMount={(_, monaco) => {
+              if (!themeRegistered.current) { defineEditorTheme(monaco); themeRegistered.current = true; }
+              monaco.editor.setTheme(SITE_THEME_ID);
+            }}
+            onChange={(v) => setCode(v || "")}
+            options={{ fontSize: 13, minimap: { enabled: false }, padding: { top: 20 }, automaticLayout: true }}
           />
-        </div>
+        )}
 
-        {/* Actions */}
-        <div className="flex items-center gap-2 p-3 border-t border-border">
-          <Button
-            size="sm"
-            variant="secondary"
-            onClick={handleRun}
-            disabled={isRunning}
-            className="font-mono text-xs"
-          >
-            <Play className="h-3 w-3 mr-1" />
-            {isRunning ? "Running..." : "Run Code"}
+        <div className="absolute bottom-4 right-4 flex items-center gap-2">
+          <Button size="sm" onClick={handleRun} disabled={isRunning} className="bg-[#1e2d45] text-white hover:bg-[#2a3f5f] h-9 px-4 uppercase text-[10px] font-bold shadow-lg">
+            Run Test
           </Button>
-          <Button
-            size="sm"
-            onClick={handleSubmit}
-            className="font-mono text-xs bg-primary text-primary-foreground hover:bg-primary/90"
-          >
-            <Send className="h-3 w-3 mr-1" />
+          <Button size="sm" onClick={handleSubmit} className="bg-primary text-background font-bold h-9 px-8 uppercase text-[10px] tracking-wider shadow-[0_0_20px_rgba(var(--primary-rgb),0.3)] hover:scale-105 transition-transform">
             Submit
           </Button>
         </div>
