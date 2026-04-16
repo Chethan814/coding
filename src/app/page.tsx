@@ -58,14 +58,7 @@ export default function Landing() {
             >
               Enter Competition
             </Button>
-            <Button
-              size="lg"
-              variant="outline"
-              onClick={() => router.push("/leaderboard")}
-              className="font-mono"
-            >
-              View Leaderboard
-            </Button>
+
           </div>
         </div>
 

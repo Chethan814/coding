@@ -17,8 +17,8 @@ export default function Leaderboard() {
     const adminCheck = user?.role === "admin";
     setIsAdmin(adminCheck);
 
-    if (user && !adminCheck) {
-      router.push("/contest");
+    if (!adminCheck) {
+      router.push("/");
       return;
     }
 
@@ -65,7 +65,7 @@ export default function Leaderboard() {
     <div className="min-h-screen flex flex-col bg-background">
       <nav className="h-14 border-b border-border bg-card flex items-center justify-between px-6">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="sm" onClick={() => router.back()}>
+          <Button variant="ghost" size="sm" onClick={() => router.push('/')}>
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <span className="font-mono text-primary font-bold text-lg tracking-tighter">CodeArena</span>

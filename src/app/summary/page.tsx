@@ -290,13 +290,7 @@ export default function SubmissionSummary() {
       {/* Bottom Section - Actions */}
       <div className="border-t border-border bg-card px-6 py-4">
         <div className="max-w-4xl mx-auto flex items-center justify-end gap-3">
-          <Button
-            variant="outline"
-            onClick={() => router.push("/leaderboard")}
-            className="font-mono"
-          >
-            View Leaderboard
-          </Button>
+
           <Button
             variant="outline"
             onClick={() => router.push("/")}
